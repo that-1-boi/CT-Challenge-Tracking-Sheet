@@ -13,7 +13,7 @@ const StudentSearch: React.FC = () => {
 
   const filteredStudents = useMemo(() => {
     if (!search) return allStudents;
-    return allStudents.filter(name => 
+    return allStudents.filter(name =>
       name.toLowerCase().includes(search.toLowerCase())
     );
   }, [search, allStudents]);
@@ -44,8 +44,8 @@ const StudentSearch: React.FC = () => {
           <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Student achievement data</p>
         </div>
         <div className="text-right hidden sm:block">
-           <span className="text-[10px] font-black uppercase text-black/20 tracking-tighter">Total Students:</span>
-           <span className="ml-2 text-sm font-black text-[#f4c514]">{allStudents.length}</span>
+          <span className="text-[10px] font-black uppercase text-black/20 tracking-tighter">Total Students:</span>
+          <span className="ml-2 text-sm font-black text-[#f4c514]">{allStudents.length}</span>
         </div>
       </div>
 
@@ -80,7 +80,7 @@ const StudentSearch: React.FC = () => {
               ))
             ) : (
               <div className="p-12 text-center text-gray-400 italic text-[10px] uppercase tracking-widest">
-                 No matches found
+                No matches found
               </div>
             )}
           </div>
@@ -94,21 +94,21 @@ const StudentSearch: React.FC = () => {
                 <div className="relative z-10">
                   <div className="flex items-start justify-between mb-4">
                     <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">{selectedStudent}</h2>
-                    <button 
+                    <button
                       onClick={() => setSelectedStudent(null)}
                       className="text-white/30 hover:text-[#f4c514] transition-colors"
                     >
                       <i className="fas fa-times text-xl"></i>
                     </button>
                   </div>
-                  
+
                   <div className="mb-6 space-y-2">
                     <div className="flex justify-between items-end">
-                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#f4c514]">Career Mastery</span>
+                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#f4c514]">Completion Average</span>
                       <span className="text-xl font-black">{Math.round(stats?.progressPercent || 0)}%</span>
                     </div>
                     <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-[#f4c514] transition-all duration-1000 ease-out"
                         style={{ width: `${stats?.progressPercent}%` }}
                       ></div>
@@ -151,7 +151,7 @@ const StudentSearch: React.FC = () => {
                             <span className="text-[10px] font-black text-black italic">{Math.round(entryProgress)}%</span>
                           </div>
                           <div className="w-full bg-slate-200/50 h-1.5 rounded-full overflow-hidden">
-                            <div 
+                            <div
                               className="h-full bg-black transition-all duration-1000 ease-in-out"
                               style={{ width: `${entryProgress}%` }}
                             ></div>
@@ -175,37 +175,37 @@ const StudentSearch: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-6 animate-in fade-in duration-500">
-               <div className="bg-[#f4c514] p-8 rounded-sm text-black border-l-[12px] border-black shadow-lg">
-                  <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-2">Student Directory</h2>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-70">Showing all {allStudents.length} profiles recorded in the database</p>
-               </div>
+              <div className="bg-[#f4c514] p-8 rounded-sm text-black border-l-[12px] border-black shadow-lg">
+                <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-2">Student Directory</h2>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-70">Showing all {allStudents.length} profiles recorded in the database</p>
+              </div>
 
-               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {allStudents.map(studentName => {
-                    const studentSessions = history.filter(h => h.studentName === studentName).length;
-                    return (
-                      <button 
-                        key={studentName}
-                        onClick={() => setSelectedStudent(studentName)}
-                        className="bg-white border-2 border-slate-100 p-5 text-left rounded-sm hover:border-[#f4c514] hover:shadow-xl transition-all group relative overflow-hidden"
-                      >
-                         <div className="absolute top-0 right-0 w-16 h-16 bg-[#f4c514]/10 -rotate-45 translate-x-8 -translate-y-8 group-hover:bg-[#f4c514]/20 transition-colors"></div>
-                         <h4 className="text-lg font-black uppercase italic text-black leading-tight mb-1 truncate">{studentName}</h4>
-                         <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">{studentSessions} {studentSessions === 1 ? 'Session' : 'Sessions'}</span>
-                            <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                            <span className="text-[9px] font-black uppercase text-[#f4c514] tracking-widest">View Profile</span>
-                         </div>
-                      </button>
-                    )
-                  })}
-                  {allStudents.length === 0 && (
-                    <div className="col-span-full py-20 text-center border-2 border-dashed border-[#fff1d1] rounded-sm">
-                       <i className="fas fa-folder-open text-3xl text-slate-200 mb-3"></i>
-                       <p className="text-[10px] font-black uppercase italic text-slate-400 tracking-widest">The database is currently empty</p>
-                    </div>
-                  )}
-               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                {allStudents.map(studentName => {
+                  const studentSessions = history.filter(h => h.studentName === studentName).length;
+                  return (
+                    <button
+                      key={studentName}
+                      onClick={() => setSelectedStudent(studentName)}
+                      className="bg-white border-2 border-slate-100 p-5 text-left rounded-sm hover:border-[#f4c514] hover:shadow-xl transition-all group relative overflow-hidden"
+                    >
+                      <div className="absolute top-0 right-0 w-16 h-16 bg-[#f4c514]/10 -rotate-45 translate-x-8 -translate-y-8 group-hover:bg-[#f4c514]/20 transition-colors"></div>
+                      <h4 className="text-lg font-black uppercase italic text-black leading-tight mb-1 truncate">{studentName}</h4>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">{studentSessions} {studentSessions === 1 ? 'Session' : 'Sessions'}</span>
+                        <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
+                        <span className="text-[9px] font-black uppercase text-[#f4c514] tracking-widest">View Profile</span>
+                      </div>
+                    </button>
+                  )
+                })}
+                {allStudents.length === 0 && (
+                  <div className="col-span-full py-20 text-center border-2 border-dashed border-[#fff1d1] rounded-sm">
+                    <i className="fas fa-folder-open text-3xl text-slate-200 mb-3"></i>
+                    <p className="text-[10px] font-black uppercase italic text-slate-400 tracking-widest">The database is currently empty</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
