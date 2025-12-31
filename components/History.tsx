@@ -156,14 +156,6 @@ const History: React.FC = () => {
                         {entry.challenges.length === 0 && <span className="text-[9px] text-gray-400 uppercase italic">N/A</span>}
                       </div>
                     </td>
-                    <td className="p-2 text-center">
-                      <button
-                        onClick={() => setEditingEntry(entry)}
-                        className="text-gray-400 hover:text-black transition-colors"
-                      >
-                        <i className="fas fa-pencil-alt text-xs"></i>
-                      </button>
-                    </td>
                   </tr>
                 ))
               ) : (
