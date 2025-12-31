@@ -92,32 +92,32 @@ const History: React.FC = () => {
           <h1 className="text-3xl md:text-4xl font-black text-[#333] tracking-tighter italic uppercase">Session History</h1>
           <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Audit archive for all session records</p>
         </div>
-        
+
         <div className="flex flex-col sm:flex-row gap-3">
-           <div className="flex gap-1">
-             <input
-                type="text"
-                placeholder="Student/Theme..."
-                className="bg-[#fff1d1] border-b border-[#f4c514] px-3 py-1 text-sm outline-none font-bold text-gray-800 placeholder:text-gray-400 min-w-[150px] capitalize"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-             />
-             <select 
-                className="bg-[#fff1d1] border-b border-[#f4c514] px-3 py-1 text-sm outline-none font-bold cursor-pointer"
-                value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
-             >
-               {classes.map(c => <option key={c} value={c}>{c}</option>)}
-             </select>
-           </div>
-           
-           <button 
-             onClick={exportToExcel}
-             className="bg-black text-[#f4c514] px-4 py-2 rounded-sm font-black uppercase tracking-widest text-[10px] hover:bg-gray-800 transition-colors shadow-md flex items-center justify-center gap-2"
-           >
-             <i className="fas fa-download"></i>
-             Export Excel
-           </button>
+          <div className="flex gap-1">
+            <input
+              type="text"
+              placeholder="Student/Theme..."
+              className="bg-[#fff1d1] border-b border-[#f4c514] px-3 py-1 text-sm outline-none font-bold text-gray-800 placeholder:text-gray-400 min-w-[150px] capitalize"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <select
+              className="bg-[#fff1d1] border-b border-[#f4c514] px-3 py-1 text-sm outline-none font-bold cursor-pointer"
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+            >
+              {classes.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          <button
+            onClick={exportToExcel}
+            className="bg-black text-[#f4c514] px-4 py-2 rounded-sm font-black uppercase tracking-widest text-[10px] hover:bg-gray-800 transition-colors shadow-md flex items-center justify-center gap-2"
+          >
+            <i className="fas fa-download"></i>
+            Export Excel
+          </button>
         </div>
       </div>
 
@@ -130,7 +130,6 @@ const History: React.FC = () => {
                 <th className="p-3 border border-[#ffe5a0] text-left text-[10px] font-black uppercase tracking-widest text-black">Student</th>
                 <th className="p-3 border border-[#ffe5a0] text-left text-[10px] font-black uppercase tracking-widest text-black">Class</th>
                 <th className="p-3 border border-[#ffe5a0] text-left text-[10px] font-black uppercase tracking-widest text-black">Challenges</th>
-                <th className="p-3 border border-[#ffe5a0] text-center text-[10px] font-black uppercase tracking-widest text-black w-16">Edit</th>
               </tr>
             </thead>
             <tbody>
@@ -158,7 +157,7 @@ const History: React.FC = () => {
                       </div>
                     </td>
                     <td className="p-2 text-center">
-                      <button 
+                      <button
                         onClick={() => setEditingEntry(entry)}
                         className="text-gray-400 hover:text-black transition-colors"
                       >
