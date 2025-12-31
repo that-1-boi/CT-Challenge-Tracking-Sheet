@@ -1,0 +1,5 @@
+{
+  "name": "Cautiontape Challenge Tracking Sheet",
+  "description": "A live-updating classroom management tool to track student progress across weekly challenges and hands-on activities, featuring a parent-facing dashboard and historical data search.",
+  "requestFramePermissions": []
+}
