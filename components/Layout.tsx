@@ -10,7 +10,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navItems = [
     { path: '/', label: 'Public Display', icon: 'fa-tv', protected: false },
     { path: '/search', label: 'Student Progress', icon: 'fa-user-graduate', protected: false },
-    { path: '/dashboard', label: 'Tracker Dashboard', icon: 'fa-edit', protected: true },   
+    { path: '/dashboard', label: 'Tracker Dashboard', icon: 'fa-edit', protected: true },
     { path: '/admin', label: 'Management', icon: 'fa-cog', protected: true },
     { path: '/history', label: 'Session History', icon: 'fa-history', protected: true },
   ];
@@ -31,23 +31,22 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Sidebar */}
       <aside className="w-16 md:w-20 bg-[#1a1a1a] flex flex-col items-center py-6 shrink-0 fixed h-full z-50 shadow-2xl">
         <div className="mb-auto flex flex-col items-center gap-6 w-full px-2">
-          {/* Logo - High quality SVG for STEM/Robotics theme */}
+          {/* Logo*/}
           <div className="w-10 h-10 md:w-14 md:h-14 bg-black flex items-center justify-center rounded-sm overflow-hidden border border-gray-800 shadow-inner group cursor-pointer" onClick={() => navigate('/')}>
-          <img src="logo.png" />
+            <img src="logo.png" />
           </div>
-          
+
           <nav className="flex flex-col gap-6 md:gap-8">
             {visibleNavItems.map((item) => {
               return (
-                <Link 
+                <Link
                   key={item.path}
-                  to={item.path} 
-                  title={item.label} 
-                  className={`text-lg md:text-xl transition-all duration-300 transform hover:scale-110 flex justify-center ${
-                    location.pathname === item.path 
-                      ? 'text-[#f4c514]' 
-                      : 'text-gray-500 hover:text-white'
-                  }`}
+                  to={item.path}
+                  title={item.label}
+                  className={`text-lg md:text-xl transition-all duration-300 transform hover:scale-110 flex justify-center ${location.pathname === item.path
+                    ? 'text-[#f4c514]'
+                    : 'text-gray-500 hover:text-white'
+                    }`}
                 >
                   <i className={`fas ${item.icon}`}></i>
                 </Link>
@@ -63,7 +62,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
           {/* Unified Status & Login/Logout Action Box */}
           {isAuthenticated ? (
-            <button 
+            <button
               onClick={handleLogout}
               title="Logout"
               className="w-10 h-10 md:w-12 md:h-12 bg-[#f4c514] flex items-center justify-center text-black shadow-lg mt-1 hover:bg-white transition-all transform active:scale-90"
@@ -71,7 +70,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               <i className="fas fa-sign-out-alt text-lg md:text-xl"></i>
             </button>
           ) : (
-            <Link 
+            <Link
               to="/login"
               title="Login"
               className="w-10 h-10 md:w-12 md:h-12 bg-[#f4c514] flex items-center justify-center text-black shadow-lg mt-1 hover:bg-white transition-all transform active:scale-90"

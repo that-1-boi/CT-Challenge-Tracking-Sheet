@@ -8,7 +8,7 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const ADMIN_PASSWORD = 'admin'; 
+  const ADMIN_PASSWORD = 'info839';
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,8 +25,8 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-white p-6 relative">
       {/* Back to Public View Link */}
-      <Link 
-        to="/" 
+      <Link
+        to="/"
         className="absolute top-8 left-8 text-black font-black uppercase text-[14px] tracking-widest hover:text-[#f4c514] transition-colors flex items-center gap-2"
       >
         <i className="fas fa-arrow-left"></i>
@@ -36,11 +36,11 @@ const Login: React.FC = () => {
       <div className="w-full max-w-md animate-in fade-in zoom-in duration-500">
         <div className="bg-black p-12 shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)] border-b-8 border-[#f4c514] rounded-sm">
           <div className="mb-8 text-center">
-             <div className="w-20 h-20 bg-[#f4c514] mx-auto flex items-center justify-center rounded-sm mb-6 rotate-3">
-               <img src="logo.png" />
-             </div>
-             <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter">Coach <span className="text-[#f4c514]">Portal</span></h1>
-             <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-2">Access Restricted to Faculty</p>
+            <div className="w-20 h-20 bg-[#f4c514] mx-auto flex items-center justify-center rounded-sm mb-6 rotate-3">
+              <img src="logo.png" />
+            </div>
+            <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter">Coach <span className="text-[#f4c514]">Portal</span></h1>
+            <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-2">Access Restricted to Faculty</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
@@ -69,10 +69,10 @@ const Login: React.FC = () => {
               Unlock Dashboard
             </button>
           </form>
-          
+
           <div className="mt-8 pt-8 border-t border-white/10 text-center">
             <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest leading-relaxed">
-              Cautiontape Robotics<br/>
+              Cautiontape Robotics<br />
               &copy; Challenge Tracking Sheet 2025
             </p>
           </div>
