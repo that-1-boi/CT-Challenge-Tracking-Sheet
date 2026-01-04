@@ -175,13 +175,21 @@ async function supabaseToAppState(): Promise<AppState> {
         }
       }
 
-      // Ensure all default classes exist
+      // Ensure all default classes exist and sort by DEFAULT_CLASSES order
       const themeClassIds = new Set(themeClasses.map(c => c.id));
       const missingClasses = DEFAULT_CLASSES.filter(dc => !themeClassIds.has(dc.id));
-      const allClasses = [
+      const allClassesWithMissing = [
         ...themeClasses,
         ...missingClasses.map(c => ({ ...c, students: [] })),
       ];
+
+      // Sort classes to match DEFAULT_CLASSES order
+      const classOrderMap = new Map(DEFAULT_CLASSES.map((c, idx) => [c.id, idx]));
+      const allClasses = allClassesWithMissing.sort((a, b) => {
+        const orderA = classOrderMap.get(a.id) ?? 999;
+        const orderB = classOrderMap.get(b.id) ?? 999;
+        return orderA - orderB;
+      });
 
       console.log(`Theme ${themeRow.name} has ${allClasses.length} classes, ${allClasses.reduce((sum, c) => sum + c.students.length, 0)} total students`);
 
@@ -196,20 +204,29 @@ async function supabaseToAppState(): Promise<AppState> {
     // Build progress object
     const progress: Record<string, StudentProgress> = {};
     if (progressData) {
+      console.log(`Loading ${progressData.length} progress entries from database`);
       for (const progRow of progressData) {
         // Find the student to get their name
         const student = (studentsData || []).find((s: StudentRow) => s.id === progRow.student_id);
         if (student) {
+          // Build key: class_session_id_student_id_theme_name
+          // Theme name might contain underscores, so we use the full theme_name from DB
           const key = `${progRow.class_session_id}_${progRow.student_id}_${progRow.theme_name}`;
           progress[key] = {
             studentId: progRow.student_id,
             studentName: student.name,
-            challengesCompleted: progRow.challenges_completed,
+            challengesCompleted: Array.isArray(progRow.challenges_completed) ? progRow.challenges_completed : [],
             timestamp: new Date(progRow.timestamp).getTime(),
           };
+          console.log(`Loaded progress for ${key}: ${progRow.challenges_completed?.length || 0} challenges completed`);
+        } else {
+          console.warn(`Student ${progRow.student_id} not found for progress entry (class: ${progRow.class_session_id}, theme: ${progRow.theme_name})`);
         }
       }
+    } else {
+      console.log('No progress data found in database');
     }
+    console.log(`Total progress keys loaded: ${Object.keys(progress).length}`);
 
     // Get app settings
     const currentWeekTheme = (await getAppSetting('currentWeekTheme')) || themes[0]?.name || DEFAULT_THEMES[0].name;
@@ -329,8 +346,20 @@ async function appStateToSupabase(state: AppState): Promise<void> {
     }
 
     // 4. Upsert student progress
+    console.log(`Saving ${Object.keys(state.progress).length} progress entries`);
     for (const [key, progress] of Object.entries(state.progress)) {
-      const [classSessionId, studentId, themeName] = key.split('_');
+      const parts = key.split('_');
+      if (parts.length < 3) {
+        console.warn(`Invalid progress key format: ${key}, expected format: classId_studentId_themeName`);
+        continue;
+      }
+      
+      // Handle keys that might have underscores in theme names
+      const classSessionId = parts[0];
+      const studentId = parts[1];
+      const themeName = parts.slice(2).join('_'); // Join remaining parts in case theme name has underscores
+      
+      console.log(`Saving progress for key ${key}: class=${classSessionId}, student=${studentId}, theme=${themeName}, challenges=${progress.challengesCompleted.length}`);
       
       const { error: progressError } = await supabase
         .from('student_progress')
@@ -339,7 +368,7 @@ async function appStateToSupabase(state: AppState): Promise<void> {
             student_id: studentId,
             class_session_id: classSessionId,
             theme_name: themeName,
-            challenges_completed: progress.challengesCompleted,
+            challenges_completed: progress.challengesCompleted || [],
             timestamp: new Date(progress.timestamp).toISOString(),
           },
           { onConflict: 'student_id,class_session_id,theme_name' }
@@ -347,6 +376,8 @@ async function appStateToSupabase(state: AppState): Promise<void> {
 
       if (progressError) {
         console.error(`Error upserting progress for ${key}:`, progressError);
+      } else {
+        console.log(`Successfully saved progress for ${key}`);
       }
     }
 

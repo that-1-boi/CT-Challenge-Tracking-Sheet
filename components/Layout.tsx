@@ -33,7 +33,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <aside className="w-16 md:w-20 bg-[#1a1a1a] flex flex-col items-center py-6 shrink-0 fixed h-full z-50 shadow-2xl">
         <div className="mb-auto flex flex-col items-center gap-6 w-full px-2">
           {/* Logo*/}
-          <div className="w-10 h-10 md:w-14 md:h-14 bg-black flex items-center justify-center rounded-sm overflow-hidden border border-gray-800 shadow-inner group cursor-pointer" onClick={() => navigate('/')}>
+          <div className="w-15 h-15 md:w-14 md:h-14 bg-black flex items-center justify-center rounded-sm overflow-hidden border border-gray-800 shadow-inner group cursor-pointer" onClick={() => navigate('/')}>
             <img src={logo} alt="Logo" className="w-full h-full object-contain" />
           </div>
 

@@ -23,6 +23,11 @@ const Admin: React.FC = () => {
 
   useEffect(() => {
     loadState().then(loadedState => {
+      console.log('Admin: Loaded state from database', {
+        themes: loadedState.themes.length,
+        progressKeys: Object.keys(loadedState.progress).length,
+        currentTheme: loadedState.currentWeekTheme
+      });
       setState(loadedState);
       setLoading(false);
       setSaveStatus('All changes saved');

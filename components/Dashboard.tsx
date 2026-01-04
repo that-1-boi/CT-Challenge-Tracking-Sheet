@@ -12,9 +12,22 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     loadState().then(loadedState => {
+      console.log('Dashboard: Loaded state from database', {
+        themes: loadedState.themes.length,
+        progressKeys: Object.keys(loadedState.progress).length,
+        currentTheme: loadedState.currentWeekTheme
+      });
       setState(loadedState);
       setLoading(false);
-      previousStateRef.current = JSON.stringify(loadedState);
+      // Initialize previous state ref with just the parts we track for saving
+      const stateToCompare = {
+        progress: loadedState.progress,
+        currentWeekTheme: loadedState.currentWeekTheme,
+        publicThemeName: loadedState.publicThemeName,
+        publicClassId: loadedState.publicClassId,
+        selectedClassId: loadedState.selectedClassId,
+      };
+      previousStateRef.current = JSON.stringify(stateToCompare);
       isInitialLoad.current = false;
     }).catch(error => {
       console.error('Error loading state:', error);
@@ -30,10 +43,21 @@ const Dashboard: React.FC = () => {
     }
     
     // Compare with previous state to avoid unnecessary saves
-    const currentStateString = JSON.stringify(state);
+    // Only compare progress and settings, not the entire state (which includes themes/classes that might change)
+    const stateToCompare = {
+      progress: state.progress,
+      currentWeekTheme: state.currentWeekTheme,
+      publicThemeName: state.publicThemeName,
+      publicClassId: state.publicClassId,
+      selectedClassId: state.selectedClassId,
+    };
+    const currentStateString = JSON.stringify(stateToCompare);
     if (previousStateRef.current === currentStateString) {
       return;
     }
+    
+    // Update previous state ref immediately to prevent re-triggering
+    previousStateRef.current = currentStateString;
     
     // Clear any pending save
     if (saveTimeoutRef.current) {
@@ -43,9 +67,12 @@ const Dashboard: React.FC = () => {
     // Debounce the save operation
     saveTimeoutRef.current = setTimeout(() => {
       saveState(state).then(() => {
-        previousStateRef.current = JSON.stringify(state);
+        // Update ref after successful save
+        previousStateRef.current = JSON.stringify(stateToCompare);
       }).catch(error => {
         console.error('Error saving state:', error);
+        // Reset ref on error so it can retry
+        previousStateRef.current = '';
       });
     }, 500);
     
