@@ -1,10 +1,18 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppState, Theme, Student } from '../types';
 import { loadState, saveState } from '../services/storageService';
 import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
 
 const Admin: React.FC = () => {
-  const [state, setState] = useState<AppState | null>(null);
+  const [state, setState] = useState<AppState>({
+    themes: DEFAULT_THEMES,
+    currentWeekTheme: DEFAULT_THEMES[0].name,
+    publicThemeName: DEFAULT_THEMES[0].name,
+    publicClassId: DEFAULT_CLASSES[0].id,
+    progress: {},
+    selectedClassId: DEFAULT_CLASSES[0].id,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [draggedStudent, setDraggedStudent] = useState<{ studentId: string; sourceClassId: string } | null>(null);
   const [dragOverClassId, setDragOverClassId] = useState<string | null>(null);
@@ -18,38 +26,20 @@ const Admin: React.FC = () => {
 
   useEffect(() => {
     // Load state on mount
-    console.log('Admin: Loading state from database...');
     loadState().then(loadedState => {
-      console.log('Admin: Loaded state, themes:', loadedState.themes.length);
-      console.log('Admin: Total students across all themes:',
-        loadedState.themes.reduce((sum, t) =>
-          sum + t.classes.reduce((classSum, c) => classSum + c.students.length, 0), 0
-        )
-      );
       setState(loadedState);
       setIsLoading(false);
       setSaveStatus('All changes saved');
-    }).catch(error => {
-      console.error('Admin: Error loading state:', error);
-      setIsLoading(false);
-      setSaveStatus('Error loading');
     });
   }, []);
 
   useEffect(() => {
     // Save state when it changes (but not on initial load)
-    if (!isLoading && state) {
+    if (!isLoading) {
       setSaveStatus('Saving changes...');
-      console.log('Admin: Saving state to database...');
-      console.log('Admin: Total students being saved:',
-        state.themes.reduce((sum, t) =>
-          sum + t.classes.reduce((classSum, c) => classSum + c.students.length, 0), 0
-        )
-      );
       saveState(state)
         .then(() => {
           setSaveStatus('All changes saved');
-          console.log('Admin: State saved successfully');
         })
         .catch(err => {
           console.error('Error saving state:', err);
@@ -57,15 +47,6 @@ const Admin: React.FC = () => {
         });
     }
   }, [state, isLoading]);
-
-  if (isLoading || !state) {
-    return (
-      <div className="p-10 text-center">
-        <div className="w-12 h-12 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="font-black uppercase text-sm text-gray-400">Loading Admin Panel...</p>
-      </div>
-    );
-  }
 
   const activeTheme = state.themes.find(t => t.name === state.currentWeekTheme) || state.themes[0];
 
@@ -78,55 +59,6 @@ const Admin: React.FC = () => {
     });
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [state]);
-
-  // Count students in current theme
-  const currentThemeStudentCount = useMemo(() => {
-    if (!activeTheme) return 0;
-    let count = 0;
-    activeTheme.classes.forEach(c => {
-      count += c.students.length;
-    });
-    return count;
-  }, [activeTheme]);
-
-  const syncStudentsToCurrentTheme = () => {
-    if (!window.confirm(`This will add all ${globalStudents.length} students from the database to the Unassigned pool for "${state.currentWeekTheme}". Any students already in this theme will remain. Continue?`)) {
-      return;
-    }
-
-    setState(prev => {
-      // Get existing student IDs in current theme to avoid duplicates
-      const currentTheme = prev.themes.find(t => t.name === prev.currentWeekTheme);
-      const existingIds = new Set<string>();
-      if (currentTheme) {
-        currentTheme.classes.forEach(c => {
-          c.students.forEach(s => existingIds.add(s.id));
-        });
-      }
-
-      // Filter out students that already exist in this theme
-      const newStudents = globalStudents.filter(s => !existingIds.has(s.id)).map(s => ({ ...s }));
-
-      return {
-        ...prev,
-        themes: prev.themes.map(t =>
-          t.name === prev.currentWeekTheme
-            ? {
-              ...t,
-              classes: t.classes.map(c =>
-                c.id === 'unassigned'
-                  ? { ...c, students: [...c.students, ...newStudents] }
-                  : c
-              )
-            }
-            : t
-        )
-      };
-    });
-
-    setSaveStatus('Students synced successfully!');
-    setTimeout(() => setSaveStatus('All changes saved'), 2000);
-  };
 
   const updateClassName = (classId: string, newName: string) => {
     setState(prev => ({
@@ -188,8 +120,8 @@ const Admin: React.FC = () => {
     fileInputRef.current?.click();
   };
 
-  const handlePasteImage = (e: React.ClipboardEvent, index: number) => {
-    const items = e.clipboardData?.items;
+  const handlePasteImage = (Leeds: React.ClipboardEvent, index: number) => {
+    const items = Leeds.clipboardData?.items;
     if (!items) return;
 
     for (let i = 0; i < items.length; i++) {
@@ -370,45 +302,6 @@ const Admin: React.FC = () => {
               </h2>
             </div>
 
-            {/* Student Sync Alert */}
-            {currentThemeStudentCount === 0 && globalStudents.length > 0 && (
-              <div className="bg-amber-50 border-2 border-amber-400 rounded-sm p-4 flex items-start gap-3">
-                <i className="fas fa-exclamation-triangle text-amber-600 text-xl mt-1"></i>
-                <div className="flex-1">
-                  <h3 className="font-black text-amber-900 uppercase text-sm">No Students in This Theme</h3>
-                  <p className="text-amber-800 text-xs mt-1">
-                    This theme has no students. There are <strong>{globalStudents.length} students</strong> in the database.
-                  </p>
-                  <button
-                    onClick={syncStudentsToCurrentTheme}
-                    className="mt-3 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-sm text-xs font-black uppercase transition-colors"
-                  >
-                    <i className="fas fa-sync-alt mr-2"></i>
-                    Sync All Students to This Theme
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Show sync button even when students exist */}
-            {currentThemeStudentCount > 0 && currentThemeStudentCount < globalStudents.length && (
-              <div className="bg-blue-50 border border-blue-300 rounded-sm p-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <i className="fas fa-info-circle text-blue-600"></i>
-                  <span className="text-blue-900 text-xs font-bold">
-                    {currentThemeStudentCount} of {globalStudents.length} students in this theme
-                  </span>
-                </div>
-                <button
-                  onClick={syncStudentsToCurrentTheme}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-sm text-[10px] font-black uppercase transition-colors"
-                >
-                  <i className="fas fa-sync-alt mr-1"></i>
-                  Sync Missing
-                </button>
-              </div>
-            )}
-
             <div className="space-y-6">
               {activeTheme?.classes.map((cls) => (
                 <div
@@ -551,9 +444,8 @@ const Admin: React.FC = () => {
               <p className="text-white font-black uppercase text-xs italic tracking-widest">Roster Instructions</p>
               <p className="text-gray-400 text-[10px] mt-2 leading-relaxed">
                 1. Add all students to the <b>Unassigned</b> pool first.<br />
-                2. Use the <b>Sync Students</b> button to populate new themes.<br />
-                3. Drag and drop students into their specific session times.<br />
-                4. Click the <b>Image</b> icon OR focus the name field and <b>Ctrl+V</b> to paste an image for each challenge.
+                2. Drag and drop students into their specific session times.<br />
+                3. Click the <b>Image</b> icon OR focus the name field and <b>Ctrl+V</b> to paste an image for each challenge.
               </p>
             </div>
           </div>
