@@ -8,15 +8,17 @@ const Dashboard: React.FC = () => {
   const isInitialLoad = useRef(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load state from database on mount - using .then() like StudentSearch does
+  // Load state from database on mount
   useEffect(() => {
+    console.log('Dashboard: Starting to load state...');
     loadState().then(loadedState => {
-      console.log('Dashboard: Loaded state from database', {
-        themes: loadedState.themes.length,
-        progressKeys: Object.keys(loadedState.progress || {}).length,
-        currentTheme: loadedState.currentWeekTheme,
-        progressData: loadedState.progress
-      });
+      console.log('Dashboard: ===== STATE LOADED FROM DATABASE =====');
+      console.log('Dashboard: Themes:', loadedState.themes.length);
+      console.log('Dashboard: Current theme:', loadedState.currentWeekTheme);
+      console.log('Dashboard: Progress entries:', Object.keys(loadedState.progress || {}).length);
+      console.log('Dashboard: Progress data:', loadedState.progress);
+      console.log('Dashboard: =====================================');
+
       setState(loadedState);
       setLoading(false);
       isInitialLoad.current = false;
@@ -29,30 +31,23 @@ const Dashboard: React.FC = () => {
 
   // Save state to database when it changes (debounced)
   useEffect(() => {
-    // Skip saving on initial load or if state is null
     if (isInitialLoad.current || !state) {
       return;
     }
 
-    // Clear any pending save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
 
-    // Debounce the save operation (wait 500ms after last change)
     saveTimeoutRef.current = setTimeout(() => {
-      console.log('Dashboard: Saving progress to database', {
-        progressKeys: Object.keys(state.progress || {}).length,
-        progressData: state.progress
-      });
+      console.log('Dashboard: Saving state to database...');
       saveState(state).then(() => {
-        console.log('Dashboard: Successfully saved to database');
+        console.log('Dashboard: State saved successfully');
       }).catch(error => {
         console.error('Dashboard: Error saving state:', error);
       });
     }, 500);
 
-    // Cleanup timeout on unmount
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
@@ -106,7 +101,6 @@ const Dashboard: React.FC = () => {
       }
 
       saveHistory(newHistory);
-      console.log('Dashboard: Synced to history', { studentName, challenges: challengeNames });
     }).catch(error => {
       console.error('Dashboard: Error syncing to history:', error);
     });
@@ -120,7 +114,6 @@ const Dashboard: React.FC = () => {
     const progressKey = `${currentClass.id}_${studentId}_${state.currentWeekTheme}`;
     const challengeId = `c${challengeIdx + 1}`;
 
-    // Initialize progress object if it doesn't exist
     const currentProgress = state.progress?.[progressKey] || {
       studentId,
       studentName: student.name,
@@ -138,8 +131,7 @@ const Dashboard: React.FC = () => {
       studentName: student.name,
       challengeId,
       wasCompleted: isCompleted,
-      newChallenges: updatedChallenges,
-      currentProgress
+      newChallenges: updatedChallenges
     });
 
     setState(prev => {
@@ -149,7 +141,8 @@ const Dashboard: React.FC = () => {
         progress: {
           ...(prev.progress || {}),
           [progressKey]: {
-            ...currentProgress,
+            studentId,
+            studentName: student.name,
             challengesCompleted: updatedChallenges,
             timestamp: Date.now()
           }
@@ -194,7 +187,10 @@ const Dashboard: React.FC = () => {
             </div>
             <select
               value={currentClass.id}
-              onChange={(e) => setState(prev => prev ? ({ ...prev, selectedClassId: e.target.value }) : prev)}
+              onChange={(e) => {
+                console.log('Dashboard: Switching to class:', e.target.value);
+                setState(prev => prev ? ({ ...prev, selectedClassId: e.target.value }) : prev);
+              }}
               className="bg-transparent border-b border-black text-[10px] font-bold uppercase tracking-widest text-black outline-none cursor-pointer min-w-[120px]"
             >
               {realClasses.map(c => (
@@ -209,7 +205,10 @@ const Dashboard: React.FC = () => {
                 {state.currentWeekTheme}
                 <select
                   value={state.currentWeekTheme}
-                  onChange={(e) => setState(prev => prev ? ({ ...prev, currentWeekTheme: e.target.value }) : prev)}
+                  onChange={(e) => {
+                    console.log('Dashboard: Switching to theme:', e.target.value);
+                    setState(prev => prev ? ({ ...prev, currentWeekTheme: e.target.value }) : prev);
+                  }}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 >
                   {state.themes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
@@ -231,28 +230,43 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Debug Info */}
+      {/* Debug Panel */}
       {state.progress && Object.keys(state.progress).length > 0 && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-sm text-xs">
-          <div className="font-bold text-blue-900 mb-2 flex items-center gap-2">
-            <i className="fas fa-database"></i>
-            Debug: Progress Data in Database
+        <div className="mb-4 p-4 bg-blue-50 border-2 border-blue-300 rounded-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="font-bold text-blue-900 flex items-center gap-2">
+              <i className="fas fa-database"></i>
+              Progress Data in Database
+            </div>
+            <div className="text-xs text-blue-600">
+              {Object.keys(state.progress).length} records found
+            </div>
           </div>
-          <div className="text-blue-700 space-y-1 max-h-40 overflow-y-auto">
+          <div className="text-blue-700 space-y-2 max-h-48 overflow-y-auto bg-white/50 p-3 rounded border border-blue-200">
             {Object.entries(state.progress).map(([key, value]) => (
-              <div key={key} className="font-mono text-[10px] bg-white/50 p-1.5 rounded border border-blue-100">
-                <div className="font-bold text-blue-900">{key}</div>
-                <div className="text-blue-600 ml-2">
-                  Student: {value.studentName} | Completed: [{value.challengesCompleted?.join(', ') || 'none'}]
+              <div key={key} className="font-mono text-[10px] bg-blue-100 p-2 rounded">
+                <div className="font-bold text-blue-900 mb-1">Key: {key}</div>
+                <div className="text-blue-700 ml-3 space-y-0.5">
+                  <div>Student ID: {value.studentId}</div>
+                  <div>Student Name: {value.studentName}</div>
+                  <div>Completed: [{value.challengesCompleted?.join(', ') || 'none'}]</div>
+                  <div>Count: {value.challengesCompleted?.length || 0}/5</div>
                 </div>
               </div>
             ))}
           </div>
-          <div className="mt-2 text-[9px] text-blue-600 italic">
-            ✓ Total progress records: {Object.keys(state.progress).length}
-          </div>
         </div>
       )}
+
+      {/* Current View Info */}
+      <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-sm text-xs">
+        <div className="font-bold text-purple-900 mb-1">Current View:</div>
+        <div className="text-purple-700 space-y-1">
+          <div>Theme: <strong>{state.currentWeekTheme}</strong></div>
+          <div>Class: <strong>{currentClass.name}</strong> (ID: {currentClass.id})</div>
+          <div>Students in class: <strong>{currentClass.students.length}</strong></div>
+        </div>
+      </div>
 
       <div className="bg-white shadow-xl rounded-sm overflow-hidden border border-slate-100">
         <div className="overflow-x-auto">
@@ -291,18 +305,18 @@ const Dashboard: React.FC = () => {
                   const completedCount = prog?.challengesCompleted?.length || 0;
                   const percent = (completedCount / 5) * 100;
 
-                  console.log('Rendering student row', {
-                    studentName: student.name,
-                    progKey,
-                    hasProgress: !!prog,
-                    completedChallenges: prog?.challengesCompleted || []
-                  });
-
                   return (
                     <tr key={student.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50/50 group">
-                      <td className="p-2 md:p-3 border-r border-slate-100 text-sm md:text-base font-black text-black uppercase tracking-tight whitespace-nowrap">
-                        {student.name}
-                        <div className="text-[8px] text-gray-400 font-mono font-normal">{progKey}</div>
+                      <td className="p-2 md:p-3 border-r border-slate-100">
+                        <div className="text-sm md:text-base font-black text-black uppercase tracking-tight">
+                          {student.name}
+                        </div>
+                        <div className="text-[8px] text-gray-400 font-mono mt-0.5">
+                          Looking for: {progKey}
+                        </div>
+                        <div className="text-[8px] text-gray-500 mt-0.5">
+                          {prog ? `✓ Found: ${prog.challengesCompleted?.join(', ') || 'none'}` : '✗ No progress data'}
+                        </div>
                       </td>
                       {[0, 1, 2, 3, 4].map((idx) => {
                         const challengeId = `c${idx + 1}`;
