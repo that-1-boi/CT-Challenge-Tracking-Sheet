@@ -1,52 +1,51 @@
 import { supabase } from './supabaseClient';
-import { AppState, Theme, ClassSession, Student, StudentProgress, HistoryEntry } from '../types';
+import { AppState, Theme, StudentProgress, HistoryEntry } from '../types';
 import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
 
-// Database table types
-interface ThemeRow {
-  id: string;
-  name: string;
-  challenges: string[];
-  challenge_images?: string[] | null;
-  created_at?: string;
-  updated_at?: string;
+/* =========================================================
+   NORMALIZATION (matches old localStorage behavior)
+   ========================================================= */
+
+function normalizeAppState(state: AppState): AppState {
+  const themes = state.themes.map(theme => {
+    const existingIds = new Set(theme.classes.map(c => c.id));
+    const missingClasses = DEFAULT_CLASSES
+      .filter(dc => !existingIds.has(dc.id))
+      .map(dc => ({ ...dc, students: [] }));
+
+    return {
+      ...theme,
+      classes: [...theme.classes, ...missingClasses],
+    };
+  });
+
+  const currentWeekTheme = state.currentWeekTheme || themes[0]?.name;
+
+  return {
+    themes,
+    currentWeekTheme,
+    publicThemeName: state.publicThemeName || currentWeekTheme,
+    publicClassId: state.publicClassId || DEFAULT_CLASSES[0].id,
+    selectedClassId: state.selectedClassId || DEFAULT_CLASSES[0].id,
+    progress: state.progress || {},
+  };
 }
 
-interface ClassSessionRow {
-  id: string;
-  name: string;
-  theme_id: string;
-  created_at?: string;
-  updated_at?: string;
+function getDefaultAppState(): AppState {
+  return normalizeAppState({
+    themes: JSON.parse(JSON.stringify(DEFAULT_THEMES)),
+    currentWeekTheme: DEFAULT_THEMES[0].name,
+    publicThemeName: DEFAULT_THEMES[0].name,
+    publicClassId: DEFAULT_CLASSES[0].id,
+    progress: {},
+    selectedClassId: DEFAULT_CLASSES[0].id,
+  });
 }
 
-interface StudentRow {
-  id: string;
-  class_session_id: string;
-  theme_id: string;
-  name: string;
-  created_at?: string;
-  updated_at?: string;
-}
+/* =========================================================
+   APP SETTINGS HELPERS
+   ========================================================= */
 
-interface StudentProgressRow {
-  id: string;
-  student_id: string;
-  class_session_id: string;
-  theme_name: string;
-  challenges_completed: string[];
-  timestamp: string;
-  created_at?: string;
-}
-
-interface AppSettingRow {
-  id: string;
-  key: string;
-  value: string;
-  updated_at?: string;
-}
-
-// Helper function to get or set app setting
 async function getAppSetting(key: string): Promise<string | null> {
   const { data, error } = await supabase
     .from('app_settings')
@@ -54,457 +53,169 @@ async function getAppSetting(key: string): Promise<string | null> {
     .eq('key', key)
     .single();
 
-  if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-    console.error('Error getting app setting:', error);
-    return null;
-  }
-  return data?.value || null;
+  if (error && error.code !== 'PGRST116') return null;
+  return data?.value ?? null;
 }
 
-async function setAppSetting(key: string, value: string): Promise<void> {
-  const { error } = await supabase
+async function setAppSetting(key: string, value: string) {
+  await supabase
     .from('app_settings')
     .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
-
-  if (error) {
-    console.error('Error setting app setting:', error);
-  }
 }
 
-// Convert database rows to AppState
+/* =========================================================
+   LOAD STATE (Supabase → AppState)
+   ========================================================= */
+
 async function supabaseToAppState(): Promise<AppState> {
   try {
-    // Fetch all themes
-    const { data: themesData, error: themesError } = await supabase
-      .from('themes')
-      .select('*')
-      .order('created_at', { ascending: true });
+    const { data: themesData } = await supabase.from('themes').select('*').order('created_at');
+    if (!themesData || themesData.length === 0) return getDefaultAppState();
 
-    if (themesError) {
-      console.error('Error fetching themes:', themesError);
-      return getDefaultAppState();
-    }
+    const { data: classesData } = await supabase.from('class_sessions').select('*');
+    const { data: studentsData } = await supabase.from('students').select('*');
+    const { data: progressData } = await supabase.from('student_progress').select('*');
 
-    // If no themes exist, return default state
-    if (!themesData || themesData.length === 0) {
-      return getDefaultAppState();
-    }
-
-    // Fetch all class sessions
-    const { data: classSessionsData, error: classSessionsError } = await supabase
-      .from('class_sessions')
-      .select('*');
-
-    if (classSessionsError) {
-      console.error('Error fetching class sessions:', classSessionsError);
-    } else {
-      console.log(`Loaded ${classSessionsData?.length || 0} class sessions from database`);
-    }
-
-    // Fetch all students
-    const { data: studentsData, error: studentsError } = await supabase
-      .from('students')
-      .select('*');
-
-    if (studentsError) {
-      console.error('Error fetching students:', studentsError);
-    } else {
-      console.log(`Loaded ${studentsData?.length || 0} students from database`);
-      if (studentsData && studentsData.length > 0) {
-        console.log('Sample student:', studentsData[0]);
-      }
-    }
-
-    // Fetch all student progress
-    const { data: progressData, error: progressError } = await supabase
-      .from('student_progress')
-      .select('*');
-
-    if (progressError) {
-      console.error('Error fetching progress:', progressError);
-    }
-
-    // Build themes with classes and students
-    const themes: Theme[] = themesData.map((themeRow: ThemeRow) => {
-      // Get class sessions for this theme
-      const themeClasses = (classSessionsData || [])
-        .filter((cs: ClassSessionRow) => cs.theme_id === themeRow.id)
-        .map((cs: ClassSessionRow) => {
-          // Get students for this class session
-          const classStudents = (studentsData || [])
-            .filter((s: StudentRow) => s.theme_id === themeRow.id && s.class_session_id === cs.id)
-            .map((s: StudentRow) => ({
-              id: s.id,
-              name: s.name,
-            }));
-
-          console.log(`Class ${cs.id} (${cs.name}) has ${classStudents.length} students`);
-
-          return {
-            id: cs.id,
-            name: cs.name,
-            students: classStudents,
-          };
-        });
-
-      // If no class sessions exist in DB, check if students exist for this theme and create classes for them
-      if (themeClasses.length === 0 && studentsData && studentsData.length > 0) {
-        const themeStudents = (studentsData || [])
-          .filter((s: StudentRow) => s.theme_id === themeRow.id);
-        
-        if (themeStudents.length > 0) {
-          console.log(`Found ${themeStudents.length} students for theme ${themeRow.name} but no class sessions. Creating default classes.`);
-          // Group students by class_session_id
-          const studentsByClass = new Map<string, StudentRow[]>();
-          themeStudents.forEach(s => {
-            if (!studentsByClass.has(s.class_session_id)) {
-              studentsByClass.set(s.class_session_id, []);
-            }
-            studentsByClass.get(s.class_session_id)!.push(s);
-          });
-
-          // Create class entries for each class_session_id
-          studentsByClass.forEach((students, classSessionId) => {
-            const defaultClass = DEFAULT_CLASSES.find(c => c.id === classSessionId);
-            themeClasses.push({
-              id: classSessionId,
-              name: defaultClass?.name || classSessionId,
-              students: students.map(s => ({ id: s.id, name: s.name })),
-            });
-          });
-        }
-      }
-
-      // Ensure all default classes exist and sort by DEFAULT_CLASSES order
-      const themeClassIds = new Set(themeClasses.map(c => c.id));
-      const missingClasses = DEFAULT_CLASSES.filter(dc => !themeClassIds.has(dc.id));
-      const allClassesWithMissing = [
-        ...themeClasses,
-        ...missingClasses.map(c => ({ ...c, students: [] })),
-      ];
-
-      // Sort classes to match DEFAULT_CLASSES order
-      const classOrderMap = new Map(DEFAULT_CLASSES.map((c, idx) => [c.id, idx]));
-      const allClasses = allClassesWithMissing.sort((a, b) => {
-        const orderA = classOrderMap.get(a.id) ?? 999;
-        const orderB = classOrderMap.get(b.id) ?? 999;
-        return orderA - orderB;
-      });
-
-      console.log(`Theme ${themeRow.name} has ${allClasses.length} classes, ${allClasses.reduce((sum, c) => sum + c.students.length, 0)} total students`);
+    const themes: Theme[] = themesData.map(theme => {
+      const classes = (classesData || [])
+        .filter(c => c.theme_id === theme.id)
+        .map(c => ({
+          id: c.id,
+          name: c.name,
+          students: (studentsData || [])
+            .filter(s => s.theme_id === theme.id && s.class_session_id === c.id)
+            .map(s => ({ id: s.id, name: s.name })),
+        }));
 
       return {
-        name: themeRow.name,
-        challenges: themeRow.challenges,
-        challengeImages: themeRow.challenge_images || undefined,
-        classes: allClasses,
+        name: theme.name,
+        challenges: theme.challenges,
+        challengeImages: theme.challenge_images || undefined,
+        classes,
       };
     });
 
-    // Build progress object
     const progress: Record<string, StudentProgress> = {};
-    if (progressData) {
-      console.log(`Loading ${progressData.length} progress entries from database`);
-      for (const progRow of progressData) {
-        // Find the student to get their name
-        const student = (studentsData || []).find((s: StudentRow) => s.id === progRow.student_id);
-        if (student) {
-          // Build key: class_session_id_student_id_theme_name
-          // Theme name might contain underscores, so we use the full theme_name from DB
-          const key = `${progRow.class_session_id}_${progRow.student_id}_${progRow.theme_name}`;
-          progress[key] = {
-            studentId: progRow.student_id,
-            studentName: student.name,
-            challengesCompleted: Array.isArray(progRow.challenges_completed) ? progRow.challenges_completed : [],
-            timestamp: new Date(progRow.timestamp).getTime(),
-          };
-          console.log(`Loaded progress for ${key}: ${progRow.challenges_completed?.length || 0} challenges completed`);
-        } else {
-          console.warn(`Student ${progRow.student_id} not found for progress entry (class: ${progRow.class_session_id}, theme: ${progRow.theme_name})`);
-        }
-      }
-    } else {
-      console.log('No progress data found in database');
-    }
-    console.log(`Total progress keys loaded: ${Object.keys(progress).length}`);
+    (progressData || []).forEach(row => {
+      const key = `${row.class_session_id}_${row.student_id}_${row.theme_name}`;
+      progress[key] = {
+        studentId: row.student_id,
+        studentName: row.student_name || '',
+        challengesCompleted: row.challenges_completed || [],
+        timestamp: new Date(row.timestamp).getTime(),
+      };
+    });
 
-    // Get app settings
-    const currentWeekTheme = (await getAppSetting('currentWeekTheme')) || themes[0]?.name || DEFAULT_THEMES[0].name;
+    const currentWeekTheme = (await getAppSetting('currentWeekTheme')) || themes[0].name;
     const publicThemeName = (await getAppSetting('publicThemeName')) || currentWeekTheme;
     const publicClassId = (await getAppSetting('publicClassId')) || DEFAULT_CLASSES[0].id;
     const selectedClassId = (await getAppSetting('selectedClassId')) || DEFAULT_CLASSES[0].id;
 
-    return {
+    return normalizeAppState({
       themes,
       currentWeekTheme,
       publicThemeName,
       publicClassId,
-      progress,
       selectedClassId,
-    };
-  } catch (error) {
-    console.error('Error converting Supabase data to AppState:', error);
+      progress,
+    });
+  } catch (e) {
+    console.error('Failed to load AppState from Supabase', e);
     return getDefaultAppState();
   }
 }
 
-// Convert AppState to database operations
+/* =========================================================
+   SAVE STATE (AppState → Supabase)
+   ========================================================= */
+
 async function appStateToSupabase(state: AppState): Promise<void> {
-  try {
-    // 1. Upsert themes
-    for (const theme of state.themes) {
-      const { error: themeError } = await supabase
-        .from('themes')
-        .upsert(
-          {
-            name: theme.name,
-            challenges: theme.challenges,
-            challenge_images: theme.challengeImages || null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'name' }
-        );
+  for (const theme of state.themes) {
+    const { data: themeRow } = await supabase
+      .from('themes')
+      .upsert({ name: theme.name, challenges: theme.challenges, challenge_images: theme.challengeImages || null }, { onConflict: 'name' })
+      .select('id')
+      .single();
 
-      if (themeError) {
-        console.error(`Error upserting theme ${theme.name}:`, themeError);
-        continue;
-      }
+    if (!themeRow) continue;
 
-      // Get theme ID
-      const { data: themeData, error: themeDataError } = await supabase
-        .from('themes')
+    for (const cls of theme.classes) {
+      await supabase
+        .from('class_sessions')
+        .upsert({ id: cls.id, name: cls.name, theme_id: themeRow.id }, { onConflict: 'theme_id,id' });
+
+      const { data: existing } = await supabase
+        .from('students')
         .select('id')
-        .eq('name', theme.name)
-        .single();
+        .eq('theme_id', themeRow.id)
+        .eq('class_session_id', cls.id);
 
-      if (themeDataError || !themeData) {
-        console.error(`Error getting theme ID for ${theme.name}:`, themeDataError);
-        continue;
+      const keepIds = new Set(cls.students.map(s => s.id));
+      const toDelete = (existing || []).filter(s => !keepIds.has(s.id)).map(s => s.id);
+
+      if (toDelete.length) {
+        await supabase.from('students').delete().in('id', toDelete);
       }
-      const themeId = themeData.id;
-      console.log(`Saving theme ${theme.name} with ID ${themeId}, ${theme.classes.length} classes`);
 
-      // 2. Upsert class sessions for this theme
-      for (const classSession of theme.classes) {
-        const { error: classError } = await supabase
-          .from('class_sessions')
-          .upsert(
-            {
-              id: classSession.id,
-              name: classSession.name,
-              theme_id: themeId,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'theme_id,id' }
-          );
-
-        if (classError) {
-          console.error(`Error upserting class session ${classSession.id}:`, classError);
-          continue;
-        }
-
-        // 3. Upsert students for this class session
-        // First, delete students that are no longer in the class
-        const { data: existingStudents } = await supabase
+      for (const student of cls.students) {
+        await supabase
           .from('students')
-          .select('id')
-          .eq('theme_id', themeId)
-          .eq('class_session_id', classSession.id);
-
-        const existingStudentIds = new Set(existingStudents?.map(s => s.id) || []);
-        const currentStudentIds = new Set(classSession.students.map(s => s.id));
-
-        // Delete removed students
-        const studentsToDelete = Array.from(existingStudentIds).filter(id => !currentStudentIds.has(id));
-        if (studentsToDelete.length > 0) {
-          await supabase
-            .from('students')
-            .delete()
-            .in('id', studentsToDelete);
-        }
-
-        // Upsert current students
-        for (const student of classSession.students) {
-          const { error: studentError } = await supabase
-            .from('students')
-            .upsert(
-              {
-                id: student.id,
-                name: student.name,
-                class_session_id: classSession.id,
-                theme_id: themeId,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: 'id' }
-            );
-
-          if (studentError) {
-            console.error(`Error upserting student ${student.id}:`, studentError);
-          }
-        }
+          .upsert({ id: student.id, name: student.name, class_session_id: cls.id, theme_id: themeRow.id }, { onConflict: 'id' });
       }
     }
-
-    // 4. Upsert student progress
-    console.log(`Saving ${Object.keys(state.progress).length} progress entries`);
-    for (const [key, progress] of Object.entries(state.progress)) {
-      const parts = key.split('_');
-      if (parts.length < 3) {
-        console.warn(`Invalid progress key format: ${key}, expected format: classId_studentId_themeName`);
-        continue;
-      }
-      
-      // Handle keys that might have underscores in theme names
-      const classSessionId = parts[0];
-      const studentId = parts[1];
-      const themeName = parts.slice(2).join('_'); // Join remaining parts in case theme name has underscores
-      
-      console.log(`Saving progress for key ${key}: class=${classSessionId}, student=${studentId}, theme=${themeName}, challenges=${progress.challengesCompleted.length}`);
-      
-      const { error: progressError } = await supabase
-        .from('student_progress')
-        .upsert(
-          {
-            student_id: studentId,
-            class_session_id: classSessionId,
-            theme_name: themeName,
-            challenges_completed: progress.challengesCompleted || [],
-            timestamp: new Date(progress.timestamp).toISOString(),
-          },
-          { onConflict: 'student_id,class_session_id,theme_name' }
-        );
-
-      if (progressError) {
-        console.error(`Error upserting progress for ${key}:`, progressError);
-      } else {
-        console.log(`Successfully saved progress for ${key}`);
-      }
-    }
-
-    // 5. Save app settings
-    await setAppSetting('currentWeekTheme', state.currentWeekTheme);
-    await setAppSetting('publicThemeName', state.publicThemeName);
-    await setAppSetting('publicClassId', state.publicClassId);
-    await setAppSetting('selectedClassId', state.selectedClassId);
-  } catch (error) {
-    console.error('Error saving AppState to Supabase:', error);
-    throw error;
   }
+
+  for (const [key, p] of Object.entries(state.progress)) {
+    const [classId, studentId, ...themeParts] = key.split('_');
+    const themeName = themeParts.join('_');
+
+    await supabase.from('student_progress').upsert({
+      student_id: studentId,
+      class_session_id: classId,
+      theme_name: themeName,
+      challenges_completed: p.challengesCompleted,
+      timestamp: new Date(p.timestamp).toISOString(),
+    }, { onConflict: 'student_id,class_session_id,theme_name' });
+  }
+
+  await setAppSetting('currentWeekTheme', state.currentWeekTheme);
+  await setAppSetting('publicThemeName', state.publicThemeName);
+  await setAppSetting('publicClassId', state.publicClassId);
+  await setAppSetting('selectedClassId', state.selectedClassId);
 }
 
-function getDefaultAppState(): AppState {
-  return {
-    themes: DEFAULT_THEMES,
-    currentWeekTheme: DEFAULT_THEMES[0].name,
-    publicThemeName: DEFAULT_THEMES[0].name,
-    publicClassId: DEFAULT_CLASSES[0].id,
-    progress: {},
-    selectedClassId: DEFAULT_CLASSES[0].id,
-  };
-}
+/* =========================================================
+   PUBLIC API (matches localStorage version)
+   ========================================================= */
 
-// Public API - matches storageService interface
-export const loadState = async (): Promise<AppState> => {
-  return await supabaseToAppState();
-};
-
-export const saveState = async (state: AppState): Promise<void> => {
-  await appStateToSupabase(state);
-};
+export const loadState = async (): Promise<AppState> => supabaseToAppState();
+export const saveState = async (state: AppState): Promise<void> => appStateToSupabase(state);
 
 export const loadHistory = async (): Promise<HistoryEntry[]> => {
-  try {
-    const { data, error } = await supabase
-      .from('history_entries')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error loading history:', error);
-      return [];
-    }
-
-    if (!data) return [];
-
-    return data.map((row: any) => ({
-      id: row.id,
-      studentName: row.student_name,
-      className: row.class_name,
-      weekName: row.week_name || '',
-      weekTheme: row.week_theme,
-      challenges: row.challenges,
-      allAvailableChallenges: row.all_available_challenges,
-      date: row.date,
-    }));
-  } catch (error) {
-    console.error('Error loading history:', error);
-    return [];
-  }
+  const { data } = await supabase.from('history_entries').select('*').order('created_at', { ascending: false });
+  return (data || []).map(row => ({
+    id: row.id,
+    studentName: row.student_name,
+    className: row.class_name,
+    weekName: row.week_name || '',
+    weekTheme: row.week_theme,
+    challenges: row.challenges,
+    allAvailableChallenges: row.all_available_challenges,
+    date: row.date,
+  }));
 };
 
 export const saveHistory = async (history: HistoryEntry[]): Promise<void> => {
-  try {
-    if (history.length === 0) {
-      // Clear all history if empty
-      const { data: allEntries } = await supabase
-        .from('history_entries')
-        .select('id')
-        .limit(10000);
-
-      if (allEntries && allEntries.length > 0) {
-        const idsToDelete = allEntries.map(e => e.id);
-        for (let i = 0; i < idsToDelete.length; i += 1000) {
-          const batch = idsToDelete.slice(i, i + 1000);
-          await supabase
-            .from('history_entries')
-            .delete()
-            .in('id', batch);
-        }
-      }
-      return;
-    }
-
-    // Delete all existing history entries first
-    const { data: allEntries } = await supabase
-      .from('history_entries')
-      .select('id')
-      .limit(10000); // Get all IDs (adjust if you have more than 10k entries)
-
-    if (allEntries && allEntries.length > 0) {
-      const idsToDelete = allEntries.map(e => e.id);
-      // Delete in batches of 1000 (Supabase limit)
-      for (let i = 0; i < idsToDelete.length; i += 1000) {
-        const batch = idsToDelete.slice(i, i + 1000);
-        await supabase
-          .from('history_entries')
-          .delete()
-          .in('id', batch);
-      }
-    }
-
-    const rows = history.map(entry => ({
-      student_name: entry.studentName,
-      class_name: entry.className,
-      week_name: entry.weekName,
-      week_theme: entry.weekTheme,
-      challenges: entry.challenges,
-      all_available_challenges: entry.allAvailableChallenges,
-      date: entry.date,
-    }));
-
-    // Insert in batches of 1000 (Supabase limit)
-    for (let i = 0; i < rows.length; i += 1000) {
-      const batch = rows.slice(i, i + 1000);
-      const { error: insertError } = await supabase
-        .from('history_entries')
-        .insert(batch);
-
-      if (insertError) {
-        console.error('Error saving history batch:', insertError);
-      }
-    }
-  } catch (error) {
-    console.error('Error saving history:', error);
+  await supabase.from('history_entries').delete().neq('id', '');
+  if (history.length) {
+    await supabase.from('history_entries').insert(history.map(h => ({
+      student_name: h.studentName,
+      class_name: h.className,
+      week_name: h.weekName,
+      week_theme: h.weekTheme,
+      challenges: h.challenges,
+      all_available_challenges: h.allAvailableChallenges,
+      date: h.date,
+    })));
   }
 };
-
