@@ -26,13 +26,8 @@ const Admin: React.FC = () => {
   useEffect(() => {
     // Load state on mount
     loadState().then(loadedState => {
-      console.log('🔍 Raw loaded state:', JSON.stringify(loadedState, null, 2));
-
       // Ensure all students exist in all themes
       const syncedState = syncStudentsAcrossThemes(loadedState);
-
-      console.log('✅ Synced state:', JSON.stringify(syncedState, null, 2));
-
       setState(syncedState);
       setIsLoading(false);
       setSaveStatus('All changes saved');

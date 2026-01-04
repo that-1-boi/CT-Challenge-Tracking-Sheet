@@ -138,7 +138,7 @@ async function supabaseToAppState(): Promise<AppState> {
               name: s.name,
             }));
 
-          console.log(`Theme ${themeRow.name}, Class ${cs.id} (${cs.name}) has ${classStudents.length} students`);
+          console.log(`Class ${cs.id} (${cs.name}) has ${classStudents.length} students`);
 
           return {
             id: cs.id,
@@ -251,28 +251,7 @@ async function supabaseToAppState(): Promise<AppState> {
 // Convert AppState to database operations
 async function appStateToSupabase(state: AppState): Promise<void> {
   try {
-    // Collect all students across all themes with their assignments
-    const studentAssignments = new Map<string, { name: string; assignments: Array<{ themeId: string; themeName: string; classId: string }> }>();
-
-    for (const theme of state.themes) {
-      for (const classSession of theme.classes) {
-        for (const student of classSession.students) {
-          if (!studentAssignments.has(student.id)) {
-            studentAssignments.set(student.id, { name: student.name, assignments: [] });
-          }
-          studentAssignments.get(student.id)!.assignments.push({
-            themeId: '', // Will be filled after we get theme IDs
-            themeName: theme.name,
-            classId: classSession.id,
-          });
-        }
-      }
-    }
-
-    console.log(`Processing ${studentAssignments.size} unique students with assignments`);
-
-    // 1. Upsert themes and get their IDs
-    const themeIdMap = new Map<string, string>();
+    // 1. Upsert themes
     for (const theme of state.themes) {
       const { error: themeError } = await supabase
         .from('themes')
@@ -302,23 +281,10 @@ async function appStateToSupabase(state: AppState): Promise<void> {
         console.error(`Error getting theme ID for ${theme.name}:`, themeDataError);
         continue;
       }
-      themeIdMap.set(theme.name, themeData.id);
-      console.log(`Theme ${theme.name} has ID ${themeData.id}`);
-    }
+      const themeId = themeData.id;
+      console.log(`Saving theme ${theme.name} with ID ${themeId}, ${theme.classes.length} classes`);
 
-    // Update student assignments with theme IDs
-    for (const [studentId, data] of studentAssignments.entries()) {
-      data.assignments = data.assignments.map(assignment => ({
-        ...assignment,
-        themeId: themeIdMap.get(assignment.themeName) || '',
-      }));
-    }
-
-    // 2. Upsert class sessions for all themes
-    for (const theme of state.themes) {
-      const themeId = themeIdMap.get(theme.name);
-      if (!themeId) continue;
-
+      // 2. Upsert class sessions for this theme
       for (const classSession of theme.classes) {
         const { error: classError } = await supabase
           .from('class_sessions')
@@ -334,87 +300,48 @@ async function appStateToSupabase(state: AppState): Promise<void> {
 
         if (classError) {
           console.error(`Error upserting class session ${classSession.id}:`, classError);
+          continue;
         }
-      }
-    }
 
-    // 3. Save all student assignments
-    // First, get all existing students from DB
-    const { data: existingStudentsInDb } = await supabase
-      .from('students')
-      .select('id, theme_id, class_session_id');
+        // 3. Upsert students for this class session
+        // First, delete students that are no longer in the class
+        const { data: existingStudents } = await supabase
+          .from('students')
+          .select('id')
+          .eq('theme_id', themeId)
+          .eq('class_session_id', classSession.id);
 
-    const existingStudentKeys = new Set(
-      (existingStudentsInDb || []).map(s => `${s.id}_${s.theme_id}_${s.class_session_id}`)
-    );
+        const existingStudentIds = new Set(existingStudents?.map(s => s.id) || []);
+        const currentStudentIds = new Set(classSession.students.map(s => s.id));
 
-    // Build set of current student assignments
-    const currentStudentKeys = new Set<string>();
-    const studentsToUpsert: Array<{ id: string; name: string; theme_id: string; class_session_id: string }> = [];
+        // Delete removed students
+        const studentsToDelete = Array.from(existingStudentIds).filter(id => !currentStudentIds.has(id));
+        if (studentsToDelete.length > 0) {
+          await supabase
+            .from('students')
+            .delete()
+            .in('id', studentsToDelete);
+        }
 
-    for (const [studentId, data] of studentAssignments.entries()) {
-      for (const assignment of data.assignments) {
-        if (!assignment.themeId) continue;
+        // Upsert current students
+        for (const student of classSession.students) {
+          const { error: studentError } = await supabase
+            .from('students')
+            .upsert(
+              {
+                id: student.id,
+                name: student.name,
+                class_session_id: classSession.id,
+                theme_id: themeId,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'id' }
+            );
 
-        const key = `${studentId}_${assignment.themeId}_${assignment.classId}`;
-        currentStudentKeys.add(key);
-
-        studentsToUpsert.push({
-          id: studentId,
-          name: data.name,
-          theme_id: assignment.themeId,
-          class_session_id: assignment.classId,
-        });
-      }
-    }
-
-    // Find assignments that need to be deleted (student moved from one class to another in a theme)
-    const assignmentsToDelete: Array<{ studentId: string; themeId: string; classId: string }> = [];
-    for (const s of existingStudentsInDb || []) {
-      const key = `${s.id}_${s.theme_id}_${s.class_session_id}`;
-      if (!currentStudentKeys.has(key)) {
-        assignmentsToDelete.push({
-          studentId: s.id,
-          themeId: s.theme_id,
-          classId: s.class_session_id,
-        });
-      }
-    }
-
-    console.log(`Upserting ${studentsToUpsert.length} student assignments`);
-    console.log(`Deleting ${assignmentsToDelete.length} old student assignments`);
-
-    // Delete old assignments
-    for (const assignment of assignmentsToDelete) {
-      const { error } = await supabase
-        .from('students')
-        .delete()
-        .eq('id', assignment.studentId)
-        .eq('theme_id', assignment.themeId)
-        .eq('class_session_id', assignment.classId);
-
-      if (error) {
-        console.error(`Error deleting student assignment:`, error);
-      }
-    }
-
-    // Upsert all current assignments
-    for (const student of studentsToUpsert) {
-      const { error: studentError } = await supabase
-        .from('students')
-        .upsert(
-          {
-            id: student.id,
-            name: student.name,
-            class_session_id: student.class_session_id,
-            theme_id: student.theme_id,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'id,theme_id,class_session_id' }
-        );
-
-      if (studentError) {
-        console.error(`Error upserting student ${student.id} to theme ${student.theme_id}, class ${student.class_session_id}:`, studentError);
+          if (studentError) {
+            console.error(`Error upserting student ${student.id}:`, studentError);
+          }
+        }
       }
     }
 
@@ -427,9 +354,12 @@ async function appStateToSupabase(state: AppState): Promise<void> {
         continue;
       }
 
+      // Handle keys that might have underscores in theme names
       const classSessionId = parts[0];
       const studentId = parts[1];
-      const themeName = parts.slice(2).join('_');
+      const themeName = parts.slice(2).join('_'); // Join remaining parts in case theme name has underscores
+
+      console.log(`Saving progress for key ${key}: class=${classSessionId}, student=${studentId}, theme=${themeName}, challenges=${progress.challengesCompleted.length}`);
 
       const { error: progressError } = await supabase
         .from('student_progress')
@@ -446,6 +376,8 @@ async function appStateToSupabase(state: AppState): Promise<void> {
 
       if (progressError) {
         console.error(`Error upserting progress for ${key}:`, progressError);
+      } else {
+        console.log(`Successfully saved progress for ${key}`);
       }
     }
 
@@ -454,8 +386,6 @@ async function appStateToSupabase(state: AppState): Promise<void> {
     await setAppSetting('publicThemeName', state.publicThemeName);
     await setAppSetting('publicClassId', state.publicClassId);
     await setAppSetting('selectedClassId', state.selectedClassId);
-
-    console.log('✅ Successfully saved all state to Supabase');
   } catch (error) {
     console.error('Error saving AppState to Supabase:', error);
     throw error;
@@ -515,6 +445,7 @@ export const loadHistory = async (): Promise<HistoryEntry[]> => {
 export const saveHistory = async (history: HistoryEntry[]): Promise<void> => {
   try {
     if (history.length === 0) {
+      // Clear all history if empty
       const { data: allEntries } = await supabase
         .from('history_entries')
         .select('id')
@@ -533,13 +464,15 @@ export const saveHistory = async (history: HistoryEntry[]): Promise<void> => {
       return;
     }
 
+    // Delete all existing history entries first
     const { data: allEntries } = await supabase
       .from('history_entries')
       .select('id')
-      .limit(10000);
+      .limit(10000); // Get all IDs (adjust if you have more than 10k entries)
 
     if (allEntries && allEntries.length > 0) {
       const idsToDelete = allEntries.map(e => e.id);
+      // Delete in batches of 1000 (Supabase limit)
       for (let i = 0; i < idsToDelete.length; i += 1000) {
         const batch = idsToDelete.slice(i, i + 1000);
         await supabase
@@ -559,6 +492,7 @@ export const saveHistory = async (history: HistoryEntry[]): Promise<void> => {
       date: entry.date,
     }));
 
+    // Insert in batches of 1000 (Supabase limit)
     for (let i = 0; i < rows.length; i += 1000) {
       const batch = rows.slice(i, i + 1000);
       const { error: insertError } = await supabase
@@ -573,3 +507,4 @@ export const saveHistory = async (history: HistoryEntry[]): Promise<void> => {
     console.error('Error saving history:', error);
   }
 };
+
