@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppState, Theme, Student } from '../types';
 import { loadState, saveState } from '../services/storageService';
 import { DEFAULT_CLASSES } from '../constants';
@@ -19,6 +19,7 @@ const Admin: React.FC = () => {
   const isInitialLoad = useRef(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const previousStateRef = useRef<string>('');
+  const isSavingRef = useRef(false);
 
   useEffect(() => {
     loadState().then(loadedState => {
@@ -36,8 +37,8 @@ const Admin: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Skip saving on initial load
-    if (isInitialLoad.current || !state) {
+    // Skip saving on initial load or if already saving
+    if (isInitialLoad.current || !state || isSavingRef.current) {
       return;
     }
     
@@ -47,20 +48,25 @@ const Admin: React.FC = () => {
       return;
     }
     
+    // Update previous state ref immediately to prevent re-triggering
+    previousStateRef.current = currentStateString;
+    
     // Clear any pending save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     
     // Debounce the save operation
-    setSaveStatus('Saving changes...');
     saveTimeoutRef.current = setTimeout(() => {
+      isSavingRef.current = true;
+      setSaveStatus('Saving changes...');
       saveState(state).then(() => {
         setSaveStatus('All changes saved');
-        previousStateRef.current = JSON.stringify(state);
+        isSavingRef.current = false;
       }).catch(error => {
         console.error('Error saving state:', error);
         setSaveStatus('Error saving changes');
+        isSavingRef.current = false;
       });
     }, 500);
     
@@ -82,16 +88,21 @@ const Admin: React.FC = () => {
 
   const activeTheme = state.themes.find(t => t.name === state.currentWeekTheme) || state.themes[0];
 
-  const globalStudents = useMemo(() => {
-    if (!state) return [];
+  // Calculate global students directly - simple enough that memoization isn't needed
+  const globalStudents = (() => {
+    if (!state || !state.themes) return [];
     const map = new Map<string, Student>();
     state.themes.forEach(t => {
-      t.classes.forEach(c => {
-        c.students.forEach(s => map.set(s.id, s));
-      });
+      if (t.classes) {
+        t.classes.forEach(c => {
+          if (c.students) {
+            c.students.forEach(s => map.set(s.id, s));
+          }
+        });
+      }
     });
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [state?.themes]);
+  })();
 
   const updateClassName = (classId: string, newName: string) => {
     setState(prev => {
