@@ -1,7 +1,64 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { AppState, Theme, Student } from '../types';
-import { loadState, saveState } from '../services/storageService';
-import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
+
+// Types
+interface Student {
+  id: string;
+  name: string;
+}
+
+interface Class {
+  id: string;
+  name: string;
+  students: Student[];
+}
+
+interface Theme {
+  name: string;
+  challenges: string[];
+  challengeImages?: string[];
+  classes: Class[];
+}
+
+interface AppState {
+  themes: Theme[];
+  currentWeekTheme: string;
+  publicThemeName: string;
+  publicClassId: string;
+  progress: Record<string, any>;
+  selectedClassId: string;
+}
+
+// Mock data and services
+const DEFAULT_CLASSES = [
+  { id: 'unassigned', name: 'Unassigned Students', students: [] },
+  { id: 'monday-am', name: 'Monday AM', students: [] },
+  { id: 'monday-pm', name: 'Monday PM', students: [] },
+  { id: 'tuesday-am', name: 'Tuesday AM', students: [] },
+];
+
+const DEFAULT_THEMES = [
+  {
+    name: 'Week 1',
+    challenges: ['Challenge 1', 'Challenge 2', 'Challenge 3', 'Challenge 4', 'Challenge 5'],
+    challengeImages: ['', '', '', '', ''],
+    classes: DEFAULT_CLASSES
+  }
+];
+
+const loadState = async (): Promise<AppState> => {
+  return {
+    themes: DEFAULT_THEMES,
+    currentWeekTheme: 'Week 1',
+    publicThemeName: 'Week 1',
+    publicClassId: DEFAULT_CLASSES[0].id,
+    progress: {},
+    selectedClassId: DEFAULT_CLASSES[0].id,
+  };
+};
+
+const saveState = async (state: AppState) => {
+  console.log('Saving state:', state);
+};
 
 const Admin: React.FC = () => {
   const [state, setState] = useState<AppState>({
@@ -25,8 +82,11 @@ const Admin: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadIdx, setActiveUploadIdx] = useState<number | null>(null);
 
+  // Multi-select state
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+
   useEffect(() => {
-    // Load state on mount
     loadState().then(loadedState => {
       setState(loadedState);
       setIsLoading(false);
@@ -35,7 +95,6 @@ const Admin: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Save state when it changes (but not on initial load)
     if (!isLoading) {
       setSaveStatus('Saving changes...');
       saveState(state)
@@ -61,6 +120,78 @@ const Admin: React.FC = () => {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [state]);
 
+  // Multi-select functions
+  const toggleStudentSelection = (studentId: string) => {
+    setSelectedStudents(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(studentId)) {
+        newSet.delete(studentId);
+      } else {
+        newSet.add(studentId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllInClass = (classId: string) => {
+    const cls = activeTheme?.classes.find(c => c.id === classId);
+    if (!cls) return;
+
+    setSelectedStudents(prev => {
+      const newSet = new Set(prev);
+      cls.students.forEach(s => newSet.add(s.id));
+      return newSet;
+    });
+  };
+
+  const deselectAll = () => {
+    setSelectedStudents(new Set());
+  };
+
+  const moveSelectedStudentsToClass = (targetClassId: string) => {
+    if (selectedStudents.size === 0) return;
+
+    setState(prev => {
+      const currentTheme = prev.themes.find(t => t.name === prev.currentWeekTheme);
+      if (!currentTheme) return prev;
+
+      // Find all students being moved
+      const studentsToMove: { student: Student; sourceClassId: string }[] = [];
+      currentTheme.classes.forEach(cls => {
+        cls.students.forEach(student => {
+          if (selectedStudents.has(student.id)) {
+            studentsToMove.push({ student, sourceClassId: cls.id });
+          }
+        });
+      });
+
+      return {
+        ...prev,
+        themes: prev.themes.map(t => t.name === prev.currentWeekTheme
+          ? {
+            ...t,
+            classes: t.classes.map(c => {
+              // Remove selected students from their current classes
+              const filtered = c.students.filter(s => !selectedStudents.has(s.id));
+
+              // Add selected students to target class
+              if (c.id === targetClassId) {
+                const studentsToAdd = studentsToMove.map(item => ({ ...item.student }));
+                return { ...c, students: [...filtered, ...studentsToAdd] };
+              }
+
+              return { ...c, students: filtered };
+            })
+          }
+          : t
+        )
+      };
+    });
+
+    setSelectedStudents(new Set());
+    setIsMultiSelectMode(false);
+  };
+
   const updateClassName = (classId: string, newName: string) => {
     setState(prev => ({
       ...prev,
@@ -77,7 +208,6 @@ const Admin: React.FC = () => {
 
     const newStudent: Student = { id: crypto.randomUUID(), name };
 
-    // Add student to unassigned in ALL themes
     setState(prev => ({
       ...prev,
       themes: prev.themes.map(t => ({
@@ -93,7 +223,6 @@ const Admin: React.FC = () => {
   };
 
   const updateStudentName = (classId: string, studentId: string, newName: string) => {
-    // Update student name across ALL themes and ALL classes
     setState(prev => ({
       ...prev,
       themes: prev.themes.map(t => ({
@@ -114,7 +243,6 @@ const Admin: React.FC = () => {
   const saveThemeName = (oldName: string) => {
     const newName = editingThemeNewName.trim();
 
-    // Validation
     if (!newName) {
       setEditingThemeName(null);
       return;
@@ -125,13 +253,11 @@ const Admin: React.FC = () => {
       return;
     }
 
-    // Check if name already exists
     if (state.themes.find(t => t.name === newName && t.name !== oldName)) {
       alert('A theme with this name already exists!');
       return;
     }
 
-    // Update theme name everywhere
     setState(prev => ({
       ...prev,
       themes: prev.themes.map(t => t.name === oldName ? { ...t, name: newName } : t),
@@ -162,8 +288,8 @@ const Admin: React.FC = () => {
     fileInputRef.current?.click();
   };
 
-  const handlePasteImage = (Leeds: React.ClipboardEvent, index: number) => {
-    const items = Leeds.clipboardData?.items;
+  const handlePasteImage = (e: React.ClipboardEvent, index: number) => {
+    const items = e.clipboardData?.items;
     if (!items) return;
 
     for (let i = 0; i < items.length; i++) {
@@ -193,8 +319,8 @@ const Admin: React.FC = () => {
     }
   };
 
-  const onFileChange = (e: React.ChangeEvent<HTMLSelectElement> | React.ChangeEvent<HTMLInputElement>) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file && activeUploadIdx !== null) {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -228,7 +354,6 @@ const Admin: React.FC = () => {
     const name = newThemeName.trim();
     if (!name || state.themes.find(t => t.name === name)) return;
 
-    // Get all unique students from across all themes
     const allStudents = globalStudents.map(s => ({ ...s }));
 
     const newThemeClasses = JSON.parse(JSON.stringify(DEFAULT_CLASSES)).map((c: any) => {
@@ -252,6 +377,10 @@ const Admin: React.FC = () => {
   };
 
   const handleDragStart = (e: React.DragEvent, studentId: string, sourceClassId: string) => {
+    if (isMultiSelectMode) {
+      e.preventDefault();
+      return;
+    }
     setDraggedStudent({ studentId, sourceClassId });
     e.dataTransfer.setData('text/plain', studentId);
   };
@@ -277,7 +406,6 @@ const Admin: React.FC = () => {
       const student = currentTheme.classes.find(c => c.id === sourceClassId)?.students.find(s => s.id === studentId);
       if (!student) return prev;
 
-      // ONLY modify the current theme, leave other themes unchanged
       return {
         ...prev,
         themes: prev.themes.map(t => t.name === prev.currentWeekTheme
@@ -289,7 +417,7 @@ const Admin: React.FC = () => {
               return c;
             })
           }
-          : t // Keep other themes exactly as they are
+          : t
         )
       };
     });
@@ -340,6 +468,59 @@ const Admin: React.FC = () => {
           </div>
         </div>
 
+        {/* Multi-Select Control Panel */}
+        {isMultiSelectMode && (
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 rounded-sm shadow-xl border-l-[12px] border-blue-400">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <i className="fas fa-check-square text-white text-2xl"></i>
+                <div>
+                  <h3 className="text-white font-black uppercase text-sm">Multi-Select Mode</h3>
+                  <p className="text-blue-200 text-xs">
+                    {selectedStudents.size} student{selectedStudents.size !== 1 ? 's' : ''} selected
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      moveSelectedStudentsToClass(e.target.value);
+                    }
+                  }}
+                  value=""
+                  disabled={selectedStudents.size === 0}
+                  className="bg-white text-black font-bold px-4 py-2 rounded-sm text-xs uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <option value="">Move to class...</option>
+                  {activeTheme?.classes.map(cls => (
+                    <option key={cls.id} value={cls.id}>{cls.name}</option>
+                  ))}
+                </select>
+
+                <button
+                  onClick={deselectAll}
+                  disabled={selectedStudents.size === 0}
+                  className="bg-blue-500 text-white px-4 py-2 rounded-sm text-xs font-black uppercase hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Clear Selection
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsMultiSelectMode(false);
+                    setSelectedStudents(new Set());
+                  }}
+                  className="bg-white text-blue-600 px-4 py-2 rounded-sm text-xs font-black uppercase hover:bg-gray-100"
+                >
+                  Exit Multi-Select
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           <div className="space-y-8">
             <div className="flex items-center justify-between">
@@ -347,6 +528,22 @@ const Admin: React.FC = () => {
                 <span className="w-10 h-10 bg-[#f4c514] flex items-center justify-center rounded-sm"><i className="fas fa-users text-black"></i></span>
                 Class: {state.currentWeekTheme}
               </h2>
+
+              <button
+                onClick={() => {
+                  setIsMultiSelectMode(!isMultiSelectMode);
+                  if (isMultiSelectMode) {
+                    setSelectedStudents(new Set());
+                  }
+                }}
+                className={`px-4 py-2 rounded-sm text-xs font-black uppercase transition-colors ${isMultiSelectMode
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+              >
+                <i className="fas fa-check-square mr-2"></i>
+                {isMultiSelectMode ? 'Multi-Select ON' : 'Multi-Select'}
+              </button>
             </div>
 
             <div className="space-y-6">
@@ -363,35 +560,68 @@ const Admin: React.FC = () => {
                   <div className={`px-4 py-2 flex items-center justify-between border-b ${cls.id === 'unassigned' ? 'bg-slate-200 border-slate-300' : 'bg-[#f4c514] border-black/20'
                     }`}>
                     <span className="text-black font-extrabold text-lg uppercase py-1">{cls.name}</span>
+
+                    {isMultiSelectMode && cls.students.length > 0 && (
+                      <button
+                        onClick={() => selectAllInClass(cls.id)}
+                        className="text-xs font-bold uppercase text-black/60 hover:text-black underline"
+                      >
+                        Select All
+                      </button>
+                    )}
                   </div>
 
                   <div className="p-4 space-y-3 min-h-[60px]">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {cls.students.map((student) => (
-                        <div
-                          key={student.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, student.id, cls.id)}
-                          className="flex items-center justify-between bg-white/50 p-2 rounded border border-black/5 text-sm group transition-all hover:bg-white cursor-grab active:cursor-grabbing hover:border-[#f4c514]"
-                        >
-                          <div className="flex items-center gap-2 flex-1 pointer-events-none">
-                            <i className="fas fa-grip-vertical text-black/10 group-hover:text-[#f4c514]/30"></i>
-                            {editingStudentId === student.id ? (
-                              <input
-                                autoFocus
-                                type="text"
-                                className="bg-transparent border-none outline-none font-semibold text-black w-full capitalize pointer-events-auto"
-                                value={student.name}
-                                onBlur={() => setEditingStudentId(null)}
-                                onKeyDown={(e) => e.key === 'Enter' && setEditingStudentId(null)}
-                                onChange={(e) => updateStudentName(cls.id, student.id, e.target.value)}
-                              />
-                            ) : (
-                              <span className="font-semibold text-black cursor-text w-full pointer-events-auto capitalize" onClick={() => setEditingStudentId(student.id)}>{student.name}</span>
-                            )}
+                      {cls.students.map((student) => {
+                        const isSelected = selectedStudents.has(student.id);
+                        return (
+                          <div
+                            key={student.id}
+                            draggable={!isMultiSelectMode}
+                            onDragStart={(e) => handleDragStart(e, student.id, cls.id)}
+                            onClick={() => isMultiSelectMode && toggleStudentSelection(student.id)}
+                            className={`flex items-center justify-between p-2 rounded border text-sm group transition-all ${isMultiSelectMode
+                                ? `cursor-pointer ${isSelected ? 'bg-blue-500 border-blue-600' : 'bg-white/50 border-black/5 hover:bg-blue-100 hover:border-blue-300'}`
+                                : 'bg-white/50 border-black/5 hover:bg-white cursor-grab active:cursor-grabbing hover:border-[#f4c514]'
+                              }`}
+                          >
+                            <div className="flex items-center gap-2 flex-1 pointer-events-none">
+                              {isMultiSelectMode ? (
+                                <i className={`fas ${isSelected ? 'fa-check-square text-white' : 'fa-square text-black/20'}`}></i>
+                              ) : (
+                                <i className="fas fa-grip-vertical text-black/10 group-hover:text-[#f4c514]/30"></i>
+                              )}
+                              {editingStudentId === student.id && !isMultiSelectMode ? (
+                                <input
+                                  autoFocus
+                                  type="text"
+                                  className="bg-transparent border-none outline-none font-semibold text-black w-full capitalize pointer-events-auto"
+                                  value={student.name}
+                                  onBlur={() => setEditingStudentId(null)}
+                                  onKeyDown={(e) => e.key === 'Enter' && setEditingStudentId(null)}
+                                  onChange={(e) => updateStudentName(cls.id, student.id, e.target.value)}
+                                />
+                              ) : (
+                                <span
+                                  className={`font-semibold w-full pointer-events-auto capitalize ${isMultiSelectMode
+                                      ? (isSelected ? 'text-white' : 'text-black')
+                                      : 'text-black cursor-text'
+                                    }`}
+                                  onClick={(e) => {
+                                    if (!isMultiSelectMode) {
+                                      e.stopPropagation();
+                                      setEditingStudentId(student.id);
+                                    }
+                                  }}
+                                >
+                                  {student.name}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     {cls.id === 'unassigned' && (
@@ -460,63 +690,3 @@ const Admin: React.FC = () => {
                           onClick={() => selectActiveTheme(theme.name)}
                           onDoubleClick={() => startEditingTheme(theme.name)}
                           title="Double-click to edit"
-                        >
-                          {theme.name}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {activeTheme && (
-                <div className="space-y-3 pt-6 border-t border-black/5">
-                  <h3 className="text-sm font-black uppercase italic text-black">Challenges: {activeTheme.name}</h3>
-                  <div className="grid grid-cols-1 gap-2">
-                    {activeTheme.challenges.map((chName, idx) => {
-                      const hasImage = activeTheme.challengeImages && activeTheme.challengeImages[idx];
-                      return (
-                        <div key={idx} className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleImageUpload(idx)}
-                            title="Upload Challenge Image"
-                            className={`w-10 h-10 flex items-center justify-center border border-black/10 shrink-0 transition-colors ${hasImage ? 'bg-green-500 text-white' : 'bg-[#f4c514] text-black hover:bg-black hover:text-[#f4c514]'}`}
-                          >
-                            <i className={`fas ${hasImage ? 'fa-check-circle' : 'fa-image'}`}></i>
-                          </button>
-                          <div className="flex-1 flex items-center">
-                            <span className="bg-[#f4c514] text-black w-10 h-10 flex items-center justify-center font-black border border-black/10 border-r-0 shrink-0">C{idx + 1}</span>
-                            <input
-                              type="text"
-                              value={chName}
-                              onPaste={(e) => handlePasteImage(e, idx)}
-                              onChange={(e) => updateThemeChallengeName(idx, e.target.value)}
-                              placeholder="Challenge name (Ctrl+V to paste image)"
-                              className="flex-1 bg-white border border-black/10 p-2 h-10 text-xs font-bold focus:ring-0 outline-none text-black capitalize"
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-black p-8 rounded-sm shadow-xl text-center">
-              <i className="fas fa-info-circle text-[#f4c514] mb-3 text-xl"></i>
-              <p className="text-white font-black uppercase text-xs italic tracking-widest">Roster Instructions</p>
-              <p className="text-gray-400 text-[10px] mt-2 leading-relaxed">
-                1. Add all students to the <b>Unassigned</b> pool first.<br />
-                2. Drag and drop students into their specific session times.<br />
-                3. Click the <b>Image</b> icon OR focus the name field and <b>Ctrl+V</b> to paste an image for each challenge.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-};
-
-export default Admin;
