@@ -1,22 +1,11 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { loadHistory } from '../services/storageService';
 import { HistoryEntry } from '../types';
 
 const StudentSearch: React.FC = () => {
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [history] = useState<HistoryEntry[]>(loadHistory());
   const [search, setSearch] = useState('');
-
-  useEffect(() => {
-    loadHistory().then(loadedHistory => {
-      setHistory(loadedHistory);
-      setLoading(false);
-    }).catch(error => {
-      console.error('Error loading history:', error);
-      setLoading(false);
-    });
-  }, []);
 
   const allStudents = useMemo(() => {
     return Array.from(new Set(history.map(h => h.studentName))).sort();
@@ -46,15 +35,6 @@ const StudentSearch: React.FC = () => {
     const progressPercent = (avgChallenges / 5) * 100;
     return { totalChallenges, sessions, avgChallenges, progressPercent };
   }, [studentData]);
-
-  if (loading) {
-    return (
-      <div className="p-10 text-center">
-        <div className="w-12 h-12 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="font-black uppercase text-sm text-gray-400">Loading student data...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8 w-full animate-in fade-in duration-500">
