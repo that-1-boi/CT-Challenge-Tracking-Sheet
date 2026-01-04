@@ -1,28 +1,34 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppState, HistoryEntry } from '../types';
 import { loadState, saveState, loadHistory, saveHistory } from '../services/storageService';
 
 const Dashboard: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [loading, setLoading] = useState(true);
+  const isInitialLoad = useRef(true);
 
   useEffect(() => {
     loadState().then(loadedState => {
       setState(loadedState);
       setLoading(false);
+      isInitialLoad.current = false;
     }).catch(error => {
       console.error('Error loading state:', error);
       setLoading(false);
+      isInitialLoad.current = false;
     });
   }, []);
 
   useEffect(() => {
-    if (state) {
-      saveState(state).catch(error => {
-        console.error('Error saving state:', error);
-      });
+    // Skip saving on initial load
+    if (isInitialLoad.current || !state) {
+      return;
     }
+    
+    saveState(state).catch(error => {
+      console.error('Error saving state:', error);
+    });
   }, [state]);
 
   const activeTheme = state?.themes.find(t => t.name === state.currentWeekTheme) || state?.themes[0];

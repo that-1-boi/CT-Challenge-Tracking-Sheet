@@ -16,29 +16,35 @@ const Admin: React.FC = () => {
   const [newThemeName, setNewThemeName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadIdx, setActiveUploadIdx] = useState<number | null>(null);
+  const isInitialLoad = useRef(true);
 
   useEffect(() => {
     loadState().then(loadedState => {
       setState(loadedState);
       setLoading(false);
       setSaveStatus('All changes saved');
+      isInitialLoad.current = false;
     }).catch(error => {
       console.error('Error loading state:', error);
       setLoading(false);
       setSaveStatus('Error loading data');
+      isInitialLoad.current = false;
     });
   }, []);
 
   useEffect(() => {
-    if (state) {
-      setSaveStatus('Saving changes...');
-      saveState(state).then(() => {
-        setSaveStatus('All changes saved');
-      }).catch(error => {
-        console.error('Error saving state:', error);
-        setSaveStatus('Error saving changes');
-      });
+    // Skip saving on initial load
+    if (isInitialLoad.current || !state) {
+      return;
     }
+    
+    setSaveStatus('Saving changes...');
+    saveState(state).then(() => {
+      setSaveStatus('All changes saved');
+    }).catch(error => {
+      console.error('Error saving state:', error);
+      setSaveStatus('Error saving changes');
+    });
   }, [state]);
 
   if (loading || !state) {
