@@ -1,10 +1,12 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { AppState, Theme, Student } from '../types';
 import { loadState, saveState } from '../services/storageService';
 import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
 
 const Admin: React.FC = () => {
+  const location = useLocation();
   const [state, setState] = useState<AppState>({
     themes: DEFAULT_THEMES,
     currentWeekTheme: DEFAULT_THEMES[0].name,
@@ -24,21 +26,23 @@ const Admin: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadIdx, setActiveUploadIdx] = useState<number | null>(null);
 
+  const loadData = async () => {
+    try {
+      const loadedState = await loadState();
+      setState(loadedState);
+      setSaveStatus('All changes saved');
+    } catch (error) {
+      console.error('Error loading state:', error);
+      setSaveStatus('Error loading data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadInitialState = async () => {
-      try {
-        const loadedState = await loadState();
-        setState(loadedState);
-        setSaveStatus('All changes saved');
-      } catch (error) {
-        console.error('Error loading state:', error);
-        setSaveStatus('Error loading data');
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadInitialState();
-  }, []);
+    setLoading(true);
+    loadData();
+  }, [location.pathname]); // Reload when route changes
 
   useEffect(() => {
     if (!loading) {

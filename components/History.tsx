@@ -1,29 +1,33 @@
 
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { loadHistory, saveHistory, loadState, saveState } from '../services/storageService';
 import { HistoryEntry, AppState } from '../types';
 import * as XLSX from 'xlsx';
 
 const History: React.FC = () => {
+  const location = useLocation();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('All');
   const [editingEntry, setEditingEntry] = useState<HistoryEntry | null>(null);
 
+  const loadData = async () => {
+    try {
+      const loadedHistory = await loadHistory();
+      setHistory(loadedHistory);
+    } catch (error) {
+      console.error('Error loading history:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadInitialHistory = async () => {
-      try {
-        const loadedHistory = await loadHistory();
-        setHistory(loadedHistory);
-      } catch (error) {
-        console.error('Error loading history:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadInitialHistory();
-  }, []);
+    setLoading(true);
+    loadData();
+  }, [location.pathname]); // Reload when route changes
 
   const classes = ['All', ...Array.from(new Set(history.map(h => h.className)))];
 

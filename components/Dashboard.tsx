@@ -1,10 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { AppState, HistoryEntry } from '../types';
 import { loadState, saveState, loadHistory, saveHistory } from '../services/storageService';
 import { DEFAULT_THEMES, DEFAULT_CLASSES } from '../constants';
 
 const Dashboard: React.FC = () => {
+  const location = useLocation();
   const [state, setState] = useState<AppState>({
     themes: DEFAULT_THEMES,
     currentWeekTheme: DEFAULT_THEMES[0].name,
@@ -15,19 +17,21 @@ const Dashboard: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
 
+  const loadData = async () => {
+    try {
+      const loadedState = await loadState();
+      setState(loadedState);
+    } catch (error) {
+      console.error('Error loading state:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadInitialState = async () => {
-      try {
-        const loadedState = await loadState();
-        setState(loadedState);
-      } catch (error) {
-        console.error('Error loading state:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadInitialState();
-  }, []);
+    setLoading(true);
+    loadData();
+  }, [location.pathname]); // Reload when route changes
 
   useEffect(() => {
     if (!loading) {

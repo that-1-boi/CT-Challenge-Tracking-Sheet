@@ -1,26 +1,30 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { loadHistory } from '../services/storageService';
 import { HistoryEntry } from '../types';
 
 const StudentSearch: React.FC = () => {
+  const location = useLocation();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
+  const loadData = async () => {
+    try {
+      const loadedHistory = await loadHistory();
+      setHistory(loadedHistory);
+    } catch (error) {
+      console.error('Error loading history:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadInitialHistory = async () => {
-      try {
-        const loadedHistory = await loadHistory();
-        setHistory(loadedHistory);
-      } catch (error) {
-        console.error('Error loading history:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadInitialHistory();
-  }, []);
+    setLoading(true);
+    loadData();
+  }, [location.pathname]); // Reload when route changes
 
   const allStudents = useMemo(() => {
     return Array.from(new Set(history.map(h => h.studentName))).sort();
