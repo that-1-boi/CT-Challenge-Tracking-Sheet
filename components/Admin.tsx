@@ -26,57 +26,11 @@ const Admin: React.FC = () => {
   useEffect(() => {
     // Load state on mount
     loadState().then(loadedState => {
-      // Ensure all students exist in all themes
-      const syncedState = syncStudentsAcrossThemes(loadedState);
-      setState(syncedState);
+      setState(loadedState);
       setIsLoading(false);
       setSaveStatus('All changes saved');
     });
   }, []);
-
-  // Helper function to ensure all students exist in all themes
-  const syncStudentsAcrossThemes = (appState: AppState): AppState => {
-    // Collect all unique students across all themes
-    const allStudentsMap = new Map<string, Student>();
-    appState.themes.forEach(theme => {
-      theme.classes.forEach(cls => {
-        cls.students.forEach(student => {
-          if (!allStudentsMap.has(student.id)) {
-            allStudentsMap.set(student.id, student);
-          }
-        });
-      });
-    });
-
-    const allStudents = Array.from(allStudentsMap.values());
-
-    // For each theme, ensure all students exist somewhere
-    const syncedThemes = appState.themes.map(theme => {
-      // Get all student IDs currently in this theme
-      const existingStudentIds = new Set<string>();
-      theme.classes.forEach(cls => {
-        cls.students.forEach(s => existingStudentIds.add(s.id));
-      });
-
-      // Find students that are missing from this theme
-      const missingStudents = allStudents.filter(s => !existingStudentIds.has(s.id));
-
-      // Add missing students to the unassigned class
-      const syncedClasses = theme.classes.map(cls => {
-        if (cls.id === 'unassigned' && missingStudents.length > 0) {
-          return {
-            ...cls,
-            students: [...cls.students, ...missingStudents.map(s => ({ ...s }))]
-          };
-        }
-        return cls;
-      });
-
-      return { ...theme, classes: syncedClasses };
-    });
-
-    return { ...appState, themes: syncedThemes };
-  };
 
   useEffect(() => {
     // Save state when it changes (but not on initial load)
