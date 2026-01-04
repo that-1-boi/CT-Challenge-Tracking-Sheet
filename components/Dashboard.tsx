@@ -4,32 +4,32 @@ import { loadState, saveState, loadHistory, saveHistory } from '../services/stor
 
 const Dashboard: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const isInitialLoad = useRef(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load state from database on mount
+  // Load state and history from database on mount
   useEffect(() => {
-    console.log('Dashboard: Starting to load state...');
-    loadState().then(loadedState => {
-      console.log('Dashboard: ===== STATE LOADED FROM DATABASE =====');
+    console.log('Dashboard: Starting to load state and history...');
+    Promise.all([loadState(), loadHistory()]).then(([loadedState, loadedHistory]) => {
+      console.log('Dashboard: ===== DATA LOADED FROM DATABASE =====');
       console.log('Dashboard: Themes:', loadedState.themes.length);
       console.log('Dashboard: Current theme:', loadedState.currentWeekTheme);
-      console.log('Dashboard: Progress entries:', Object.keys(loadedState.progress || {}).length);
-      console.log('Dashboard: Progress data:', loadedState.progress);
+      console.log('Dashboard: History entries:', loadedHistory.length);
       console.log('Dashboard: =====================================');
 
       // Ensure progress exists as an object
       if (!loadedState.progress) {
-        console.warn('Dashboard: Progress was null/undefined, initializing to empty object');
         loadedState.progress = {};
       }
 
       setState(loadedState);
+      setHistory(loadedHistory);
       setLoading(false);
       isInitialLoad.current = false;
     }).catch(error => {
-      console.error('Dashboard: Error loading state:', error);
+      console.error('Dashboard: Error loading data:', error);
       setLoading(false);
       isInitialLoad.current = false;
     });
@@ -47,8 +47,6 @@ const Dashboard: React.FC = () => {
 
     saveTimeoutRef.current = setTimeout(() => {
       console.log('Dashboard: Saving state to database...');
-      console.log('Dashboard: Progress to save:', state.progress);
-      console.log('Dashboard: Number of progress keys:', Object.keys(state.progress || {}).length);
       saveState(state).then(() => {
         console.log('Dashboard: State saved successfully');
       }).catch(error => {
@@ -67,34 +65,71 @@ const Dashboard: React.FC = () => {
   const realClasses = activeTheme?.classes.filter(c => c.id !== 'unassigned') || [];
   const currentClass = realClasses.find(c => c.id === state?.selectedClassId) || realClasses[0];
 
-  const syncToHistory = (studentId: string, studentName: string, updatedChallenges: string[]) => {
+  // Get progress for a student from history (most recent entry for today)
+  const getStudentProgress = (studentName: string, className: string, themeName: string) => {
+    if (!history || history.length === 0) return { challenges: [], timestamp: 0 };
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Find the most recent entry for this student, class, and theme from today
+    const studentEntries = history.filter(h =>
+      h.studentName === studentName &&
+      h.className === className &&
+      h.weekTheme === themeName &&
+      h.date.startsWith(today)
+    );
+
+    if (studentEntries.length === 0) return { challenges: [], timestamp: 0 };
+
+    // Get the most recent entry
+    const mostRecent = studentEntries.sort((a, b) =>
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    )[0];
+
+    // Convert challenge names back to IDs (c1, c2, etc.)
+    const challengeIds = mostRecent.challenges.map(challengeName => {
+      const idx = activeTheme?.challenges.indexOf(challengeName);
+      return idx !== -1 && idx !== undefined ? `c${idx + 1}` : null;
+    }).filter(Boolean) as string[];
+
+    return {
+      challenges: challengeIds,
+      timestamp: new Date(mostRecent.date).getTime()
+    };
+  };
+
+  const syncToHistory = (studentName: string, updatedChallengeIds: string[]) => {
     if (!currentClass || !activeTheme || !state) return;
 
-    loadHistory().then(history => {
+    loadHistory().then(loadedHistory => {
       const now = new Date();
       const todayStr = now.toISOString().split('T')[0];
 
-      const challengeNames = updatedChallenges.map(cid => {
+      // Convert challenge IDs to names
+      const challengeNames = updatedChallengeIds.map(cid => {
         const idx = parseInt(cid.substring(1)) - 1;
         return activeTheme.challenges[idx] || cid;
       });
 
-      const existingEntryIdx = history.findIndex(h =>
+      const existingEntryIdx = loadedHistory.findIndex(h =>
         h.studentName === studentName &&
         h.className === currentClass.name &&
         h.weekTheme === state.currentWeekTheme &&
         h.date.startsWith(todayStr)
       );
 
-      let newHistory = [...history];
+      let newHistory = [...loadedHistory];
 
       if (existingEntryIdx !== -1) {
+        // Update existing entry
         newHistory[existingEntryIdx] = {
           ...newHistory[existingEntryIdx],
           challenges: challengeNames,
-          allAvailableChallenges: activeTheme.challenges
+          allAvailableChallenges: activeTheme.challenges,
+          date: now.toISOString()
         };
       } else {
+        // Create new entry
         const newEntry: HistoryEntry = {
           id: crypto.randomUUID(),
           studentName: studentName,
@@ -108,57 +143,39 @@ const Dashboard: React.FC = () => {
         newHistory.push(newEntry);
       }
 
-      saveHistory(newHistory);
+      saveHistory(newHistory).then(() => {
+        console.log('Dashboard: History saved, reloading...');
+        // Reload history to update the UI
+        loadHistory().then(refreshedHistory => {
+          setHistory(refreshedHistory);
+        });
+      });
     }).catch(error => {
       console.error('Dashboard: Error syncing to history:', error);
     });
   };
 
-  const toggleChallenge = (studentId: string, challengeIdx: number) => {
+  const toggleChallenge = (studentName: string, challengeIdx: number) => {
     if (!currentClass || !state || !activeTheme) return;
-    const student = currentClass.students.find(s => s.id === studentId);
-    if (!student) return;
 
-    const progressKey = `${currentClass.id}_${studentId}_${state.currentWeekTheme}`;
     const challengeId = `c${challengeIdx + 1}`;
 
-    const currentProgress = state.progress?.[progressKey] || {
-      studentId,
-      studentName: student.name,
-      challengesCompleted: [],
-      timestamp: Date.now()
-    };
+    // Get current progress from history
+    const currentProgress = getStudentProgress(studentName, currentClass.name, state.currentWeekTheme);
+    const isCompleted = currentProgress.challenges.includes(challengeId);
 
-    const isCompleted = currentProgress.challengesCompleted?.includes(challengeId) || false;
     const updatedChallenges = isCompleted
-      ? currentProgress.challengesCompleted.filter(id => id !== challengeId)
-      : [...(currentProgress.challengesCompleted || []), challengeId];
+      ? currentProgress.challenges.filter(id => id !== challengeId)
+      : [...currentProgress.challenges, challengeId];
 
     console.log('Dashboard: Toggling challenge', {
-      progressKey,
-      studentName: student.name,
+      studentName,
       challengeId,
       wasCompleted: isCompleted,
       newChallenges: updatedChallenges
     });
 
-    setState(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        progress: {
-          ...(prev.progress || {}),
-          [progressKey]: {
-            studentId,
-            studentName: student.name,
-            challengesCompleted: updatedChallenges,
-            timestamp: Date.now()
-          }
-        }
-      };
-    });
-
-    syncToHistory(studentId, student.name, updatedChallenges);
+    syncToHistory(studentName, updatedChallenges);
   };
 
   if (loading) {
@@ -239,42 +256,36 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Debug Panel */}
-      {state.progress && Object.keys(state.progress).length > 0 && (
+      {history.length > 0 && (
         <div className="mb-4 p-4 bg-blue-50 border-2 border-blue-300 rounded-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="font-bold text-blue-900 flex items-center gap-2">
               <i className="fas fa-database"></i>
-              Progress Data in Database
+              History Data (Reading from history_entries table)
             </div>
             <div className="text-xs text-blue-600">
-              {Object.keys(state.progress).length} records found
+              {history.length} records found
             </div>
           </div>
           <div className="text-blue-700 space-y-2 max-h-48 overflow-y-auto bg-white/50 p-3 rounded border border-blue-200">
-            {Object.entries(state.progress).map(([key, value]) => (
-              <div key={key} className="font-mono text-[10px] bg-blue-100 p-2 rounded">
-                <div className="font-bold text-blue-900 mb-1">Key: {key}</div>
-                <div className="text-blue-700 ml-3 space-y-0.5">
-                  <div>Student ID: {value.studentId}</div>
-                  <div>Student Name: {value.studentName}</div>
-                  <div>Completed: [{value.challengesCompleted?.join(', ') || 'none'}]</div>
-                  <div>Count: {value.challengesCompleted?.length || 0}/5</div>
+            {history.slice(0, 10).map((entry) => (
+              <div key={entry.id} className="font-mono text-[10px] bg-blue-100 p-2 rounded">
+                <div className="font-bold text-blue-900 mb-1">
+                  {entry.studentName} - {entry.className} - {entry.weekTheme}
+                </div>
+                <div className="text-blue-700 ml-3">
+                  Completed: [{entry.challenges.join(', ') || 'none'}] ({entry.challenges.length}/5)
                 </div>
               </div>
             ))}
+            {history.length > 10 && (
+              <div className="text-[9px] text-blue-600 italic text-center">
+                ...and {history.length - 10} more entries
+              </div>
+            )}
           </div>
         </div>
       )}
-
-      {/* Current View Info */}
-      <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-sm text-xs">
-        <div className="font-bold text-purple-900 mb-1">Current View:</div>
-        <div className="text-purple-700 space-y-1">
-          <div>Theme: <strong>{state.currentWeekTheme}</strong></div>
-          <div>Class: <strong>{currentClass.name}</strong> (ID: {currentClass.id})</div>
-          <div>Students in class: <strong>{currentClass.students.length}</strong></div>
-        </div>
-      </div>
 
       <div className="bg-white shadow-xl rounded-sm overflow-hidden border border-slate-100">
         <div className="overflow-x-auto">
@@ -308,9 +319,9 @@ const Dashboard: React.FC = () => {
                 </tr>
               ) : (
                 currentClass.students.map((student) => {
-                  const progKey = `${currentClass.id}_${student.id}_${state.currentWeekTheme}`;
-                  const prog = state.progress?.[progKey];
-                  const completedCount = prog?.challengesCompleted?.length || 0;
+                  // Get progress from history instead of state.progress
+                  const progress = getStudentProgress(student.name, currentClass.name, state.currentWeekTheme);
+                  const completedCount = progress.challenges.length;
                   const percent = (completedCount / 5) * 100;
 
                   return (
@@ -319,21 +330,20 @@ const Dashboard: React.FC = () => {
                         <div className="text-sm md:text-base font-black text-black uppercase tracking-tight">
                           {student.name}
                         </div>
-                        <div className="text-[8px] text-gray-400 font-mono mt-0.5">
-                          Looking for: {progKey}
-                        </div>
                         <div className="text-[8px] text-gray-500 mt-0.5">
-                          {prog ? `✓ Found: ${prog.challengesCompleted?.join(', ') || 'none'}` : '✗ No progress data'}
+                          {progress.challenges.length > 0
+                            ? `✓ Progress found: ${progress.challenges.join(', ')}`
+                            : '○ No progress today'}
                         </div>
                       </td>
                       {[0, 1, 2, 3, 4].map((idx) => {
                         const challengeId = `c${idx + 1}`;
-                        const isDone = prog?.challengesCompleted?.includes(challengeId) || false;
+                        const isDone = progress.challenges.includes(challengeId);
                         return (
                           <td
                             key={idx}
                             className="p-1 md:p-2 border-r border-slate-100 text-center cursor-pointer relative overflow-hidden"
-                            onClick={() => toggleChallenge(student.id, idx)}
+                            onClick={() => toggleChallenge(student.name, idx)}
                           >
                             <div className="flex items-center justify-center relative z-10">
                               {isDone ? (
