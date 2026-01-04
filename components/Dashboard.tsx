@@ -47,6 +47,8 @@ const Dashboard: React.FC = () => {
 
     saveTimeoutRef.current = setTimeout(() => {
       console.log('Dashboard: Saving state to database...');
+      console.log('Dashboard: Progress to save:', state.progress);
+      console.log('Dashboard: Number of progress keys:', Object.keys(state.progress || {}).length);
       saveState(state).then(() => {
         console.log('Dashboard: State saved successfully');
       }).catch(error => {
