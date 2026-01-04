@@ -97,6 +97,8 @@ async function supabaseToAppState(): Promise<AppState> {
 
     if (classSessionsError) {
       console.error('Error fetching class sessions:', classSessionsError);
+    } else {
+      console.log(`Loaded ${classSessionsData?.length || 0} class sessions from database`);
     }
 
     // Fetch all students
@@ -106,6 +108,11 @@ async function supabaseToAppState(): Promise<AppState> {
 
     if (studentsError) {
       console.error('Error fetching students:', studentsError);
+    } else {
+      console.log(`Loaded ${studentsData?.length || 0} students from database`);
+      if (studentsData && studentsData.length > 0) {
+        console.log('Sample student:', studentsData[0]);
+      }
     }
 
     // Fetch all student progress
@@ -131,12 +138,42 @@ async function supabaseToAppState(): Promise<AppState> {
               name: s.name,
             }));
 
+          console.log(`Class ${cs.id} (${cs.name}) has ${classStudents.length} students`);
+
           return {
             id: cs.id,
             name: cs.name,
             students: classStudents,
           };
         });
+
+      // If no class sessions exist in DB, check if students exist for this theme and create classes for them
+      if (themeClasses.length === 0 && studentsData && studentsData.length > 0) {
+        const themeStudents = (studentsData || [])
+          .filter((s: StudentRow) => s.theme_id === themeRow.id);
+        
+        if (themeStudents.length > 0) {
+          console.log(`Found ${themeStudents.length} students for theme ${themeRow.name} but no class sessions. Creating default classes.`);
+          // Group students by class_session_id
+          const studentsByClass = new Map<string, StudentRow[]>();
+          themeStudents.forEach(s => {
+            if (!studentsByClass.has(s.class_session_id)) {
+              studentsByClass.set(s.class_session_id, []);
+            }
+            studentsByClass.get(s.class_session_id)!.push(s);
+          });
+
+          // Create class entries for each class_session_id
+          studentsByClass.forEach((students, classSessionId) => {
+            const defaultClass = DEFAULT_CLASSES.find(c => c.id === classSessionId);
+            themeClasses.push({
+              id: classSessionId,
+              name: defaultClass?.name || classSessionId,
+              students: students.map(s => ({ id: s.id, name: s.name })),
+            });
+          });
+        }
+      }
 
       // Ensure all default classes exist
       const themeClassIds = new Set(themeClasses.map(c => c.id));
@@ -145,6 +182,8 @@ async function supabaseToAppState(): Promise<AppState> {
         ...themeClasses,
         ...missingClasses.map(c => ({ ...c, students: [] })),
       ];
+
+      console.log(`Theme ${themeRow.name} has ${allClasses.length} classes, ${allClasses.reduce((sum, c) => sum + c.students.length, 0)} total students`);
 
       return {
         name: themeRow.name,
@@ -215,14 +254,18 @@ async function appStateToSupabase(state: AppState): Promise<void> {
       }
 
       // Get theme ID
-      const { data: themeData } = await supabase
+      const { data: themeData, error: themeDataError } = await supabase
         .from('themes')
         .select('id')
         .eq('name', theme.name)
         .single();
 
-      if (!themeData) continue;
+      if (themeDataError || !themeData) {
+        console.error(`Error getting theme ID for ${theme.name}:`, themeDataError);
+        continue;
+      }
       const themeId = themeData.id;
+      console.log(`Saving theme ${theme.name} with ID ${themeId}, ${theme.classes.length} classes`);
 
       // 2. Upsert class sessions for this theme
       for (const classSession of theme.classes) {
