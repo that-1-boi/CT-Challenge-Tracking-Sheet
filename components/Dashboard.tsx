@@ -2,60 +2,91 @@
 import React, { useState, useEffect } from 'react';
 import { AppState, HistoryEntry } from '../types';
 import { loadState, saveState, loadHistory, saveHistory } from '../services/storageService';
+import { DEFAULT_THEMES, DEFAULT_CLASSES } from '../constants';
 
 const Dashboard: React.FC = () => {
-  const [state, setState] = useState<AppState>(loadState());
+  const [state, setState] = useState<AppState>({
+    themes: DEFAULT_THEMES,
+    currentWeekTheme: DEFAULT_THEMES[0].name,
+    publicThemeName: DEFAULT_THEMES[0].name,
+    publicClassId: DEFAULT_CLASSES[0].id,
+    progress: {},
+    selectedClassId: DEFAULT_CLASSES[0].id,
+  });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    saveState(state);
-  }, [state]);
+    const loadInitialState = async () => {
+      try {
+        const loadedState = await loadState();
+        setState(loadedState);
+      } catch (error) {
+        console.error('Error loading state:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadInitialState();
+  }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      saveState(state).catch(error => {
+        console.error('Error saving state:', error);
+      });
+    }
+  }, [state, loading]);
 
   const activeTheme = state.themes.find(t => t.name === state.currentWeekTheme) || state.themes[0];
   const realClasses = activeTheme?.classes.filter(c => c.id !== 'unassigned') || [];
   const currentClass = realClasses.find(c => c.id === state.selectedClassId) || realClasses[0];
 
-  const syncToHistory = (studentId: string, studentName: string, updatedChallenges: string[]) => {
+  const syncToHistory = async (studentId: string, studentName: string, updatedChallenges: string[]) => {
     if (!currentClass || !activeTheme) return;
     
-    const history = loadHistory();
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    
-    const challengeNames = updatedChallenges.map(cid => {
-      const idx = parseInt(cid.substring(1)) - 1;
-      return activeTheme.challenges[idx] || cid;
-    });
+    try {
+      const history = await loadHistory();
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      
+      const challengeNames = updatedChallenges.map(cid => {
+        const idx = parseInt(cid.substring(1)) - 1;
+        return activeTheme.challenges[idx] || cid;
+      });
 
-    const existingEntryIdx = history.findIndex(h => 
-      h.studentName === studentName && 
-      h.className === currentClass.name && 
-      h.weekTheme === state.currentWeekTheme &&
-      h.date.startsWith(todayStr)
-    );
+      const existingEntryIdx = history.findIndex(h => 
+        h.studentName === studentName && 
+        h.className === currentClass.name && 
+        h.weekTheme === state.currentWeekTheme &&
+        h.date.startsWith(todayStr)
+      );
 
-    let newHistory = [...history];
+      let newHistory = [...history];
 
-    if (existingEntryIdx !== -1) {
-      newHistory[existingEntryIdx] = {
-        ...newHistory[existingEntryIdx],
-        challenges: challengeNames,
-        allAvailableChallenges: activeTheme.challenges
-      };
-    } else {
-      const newEntry: HistoryEntry = {
-        id: crypto.randomUUID(),
-        studentName: studentName,
-        className: currentClass.name,
-        weekName: `Session ${now.toLocaleDateString()}`,
-        weekTheme: state.currentWeekTheme,
-        challenges: challengeNames,
-        allAvailableChallenges: activeTheme.challenges,
-        date: now.toISOString()
-      };
-      newHistory.push(newEntry);
+      if (existingEntryIdx !== -1) {
+        newHistory[existingEntryIdx] = {
+          ...newHistory[existingEntryIdx],
+          challenges: challengeNames,
+          allAvailableChallenges: activeTheme.challenges
+        };
+      } else {
+        const newEntry: HistoryEntry = {
+          id: crypto.randomUUID(),
+          studentName: studentName,
+          className: currentClass.name,
+          weekName: `Session ${now.toLocaleDateString()}`,
+          weekTheme: state.currentWeekTheme,
+          challenges: challengeNames,
+          allAvailableChallenges: activeTheme.challenges,
+          date: now.toISOString()
+        };
+        newHistory.push(newEntry);
+      }
+
+      await saveHistory(newHistory);
+    } catch (error) {
+      console.error('Error syncing to history:', error);
     }
-
-    saveHistory(newHistory);
   };
 
   const toggleChallenge = (studentId: string, challengeIdx: number) => {
@@ -88,6 +119,15 @@ const Dashboard: React.FC = () => {
 
     syncToHistory(studentId, student.name, updatedChallenges);
   };
+
+  if (loading) {
+    return (
+      <div className="p-10 text-center">
+        <div className="w-12 h-12 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <div className="font-black uppercase text-sm text-gray-400">Loading...</div>
+      </div>
+    );
+  }
 
   if (!activeTheme || !currentClass) {
     return <div className="p-10 text-center font-black uppercase text-sm">Session not active</div>;

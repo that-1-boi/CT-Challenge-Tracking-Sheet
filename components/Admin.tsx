@@ -2,13 +2,21 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppState, Theme, Student } from '../types';
 import { loadState, saveState } from '../services/storageService';
-import { DEFAULT_CLASSES } from '../constants';
+import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
 
 const Admin: React.FC = () => {
-  const [state, setState] = useState<AppState>(loadState());
+  const [state, setState] = useState<AppState>({
+    themes: DEFAULT_THEMES,
+    currentWeekTheme: DEFAULT_THEMES[0].name,
+    publicThemeName: DEFAULT_THEMES[0].name,
+    publicClassId: DEFAULT_CLASSES[0].id,
+    progress: {},
+    selectedClassId: DEFAULT_CLASSES[0].id,
+  });
+  const [loading, setLoading] = useState(true);
   const [draggedStudent, setDraggedStudent] = useState<{ studentId: string; sourceClassId: string } | null>(null);
   const [dragOverClassId, setDragOverClassId] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<string>('All changes saved locally');
+  const [saveStatus, setSaveStatus] = useState<string>('Loading...');
   
   const [newStudentNames, setNewStudentNames] = useState<Record<string, string>>({});
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
@@ -17,11 +25,33 @@ const Admin: React.FC = () => {
   const [activeUploadIdx, setActiveUploadIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    saveState(state);
-    setSaveStatus('Saving changes...');
-    const timer = setTimeout(() => setSaveStatus('All changes saved'), 1000);
-    return () => clearTimeout(timer);
-  }, [state]);
+    const loadInitialState = async () => {
+      try {
+        const loadedState = await loadState();
+        setState(loadedState);
+        setSaveStatus('All changes saved');
+      } catch (error) {
+        console.error('Error loading state:', error);
+        setSaveStatus('Error loading data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadInitialState();
+  }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      saveState(state).then(() => {
+        setSaveStatus('Saving changes...');
+        const timer = setTimeout(() => setSaveStatus('All changes saved'), 1000);
+        return () => clearTimeout(timer);
+      }).catch(error => {
+        console.error('Error saving state:', error);
+        setSaveStatus('Error saving changes');
+      });
+    }
+  }, [state, loading]);
 
   const activeTheme = state.themes.find(t => t.name === state.currentWeekTheme) || state.themes[0];
 
@@ -223,6 +253,15 @@ const Admin: React.FC = () => {
     });
     setDraggedStudent(null);
   };
+
+  if (loading) {
+    return (
+      <div className="p-10 text-center">
+        <div className="w-12 h-12 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <div className="font-black uppercase text-sm text-gray-400">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <>
