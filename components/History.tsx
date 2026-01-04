@@ -155,7 +155,7 @@ const History: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="bg-[#000]">
+              <tr className="bg-[#f4c514]">
                 <th className="p-3 border border-[#ffe5a0] text-left text-[10px] font-black uppercase tracking-widest text-black w-24">Date</th>
                 <th className="p-3 border border-[#ffe5a0] text-left text-[10px] font-black uppercase tracking-widest text-black">Student</th>
                 <th className="p-3 border border-[#ffe5a0] text-left text-[10px] font-black uppercase tracking-widest text-black">Class</th>

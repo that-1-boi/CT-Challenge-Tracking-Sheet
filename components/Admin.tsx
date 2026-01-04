@@ -19,6 +19,8 @@ const Admin: React.FC = () => {
 
   const [newStudentNames, setNewStudentNames] = useState<Record<string, string>>({});
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  const [editingThemeName, setEditingThemeName] = useState<string | null>(null);
+  const [editingThemeNewName, setEditingThemeNewName] = useState<string>('');
   const [newThemeName, setNewThemeName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadIdx, setActiveUploadIdx] = useState<number | null>(null);
@@ -102,6 +104,47 @@ const Admin: React.FC = () => {
         }))
       }))
     }));
+  };
+
+  const startEditingTheme = (themeName: string) => {
+    setEditingThemeName(themeName);
+    setEditingThemeNewName(themeName);
+  };
+
+  const saveThemeName = (oldName: string) => {
+    const newName = editingThemeNewName.trim();
+
+    // Validation
+    if (!newName) {
+      setEditingThemeName(null);
+      return;
+    }
+
+    if (newName === oldName) {
+      setEditingThemeName(null);
+      return;
+    }
+
+    // Check if name already exists
+    if (state.themes.find(t => t.name === newName && t.name !== oldName)) {
+      alert('A theme with this name already exists!');
+      return;
+    }
+
+    // Update theme name everywhere
+    setState(prev => ({
+      ...prev,
+      themes: prev.themes.map(t => t.name === oldName ? { ...t, name: newName } : t),
+      currentWeekTheme: prev.currentWeekTheme === oldName ? newName : prev.currentWeekTheme,
+      publicThemeName: prev.publicThemeName === oldName ? newName : prev.publicThemeName,
+    }));
+
+    setEditingThemeName(null);
+  };
+
+  const cancelEditingTheme = () => {
+    setEditingThemeName(null);
+    setEditingThemeNewName('');
   };
 
   const updateThemeChallengeName = (index: number, newName: string) => {
@@ -398,12 +441,29 @@ const Admin: React.FC = () => {
                 <div className="flex flex-wrap gap-2">
                   {state.themes.map((theme) => (
                     <div key={theme.name} className={`flex items-center border rounded-sm overflow-hidden transition-all ${state.currentWeekTheme === theme.name ? 'border-black bg-[#f4c514]' : 'border-[#ffe5a0] bg-white/60'}`}>
-                      <span
-                        className={`px-3 py-1 text-[10px] font-black uppercase cursor-pointer ${state.currentWeekTheme === theme.name ? 'text-black' : 'text-gray-600'}`}
-                        onClick={() => selectActiveTheme(theme.name)}
-                      >
-                        {theme.name}
-                      </span>
+                      {editingThemeName === theme.name ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          value={editingThemeNewName}
+                          onChange={(e) => setEditingThemeNewName(e.target.value)}
+                          onBlur={() => saveThemeName(theme.name)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveThemeName(theme.name);
+                            if (e.key === 'Escape') cancelEditingTheme();
+                          }}
+                          className="px-3 py-1 text-[10px] font-black uppercase bg-transparent border-none outline-none text-black w-32"
+                        />
+                      ) : (
+                        <span
+                          className={`px-3 py-1 text-[10px] font-black uppercase cursor-pointer ${state.currentWeekTheme === theme.name ? 'text-black' : 'text-gray-600'}`}
+                          onClick={() => selectActiveTheme(theme.name)}
+                          onDoubleClick={() => startEditingTheme(theme.name)}
+                          title="Double-click to edit"
+                        >
+                          {theme.name}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
