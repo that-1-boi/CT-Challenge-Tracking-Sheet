@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppState, Theme, Student } from '../types';
 import { loadState, saveState } from '../services/storageService';
@@ -76,23 +75,23 @@ const Admin: React.FC = () => {
 
     const newStudent: Student = { id: crypto.randomUUID(), name };
 
+    // Add student to unassigned in ALL themes
     setState(prev => ({
       ...prev,
-      themes: prev.themes.map(t => {
-        return {
-          ...t,
-          classes: t.classes.map(c => c.id === 'unassigned'
-            ? { ...c, students: [...c.students, newStudent] }
-            : c
-          )
-        };
-      })
+      themes: prev.themes.map(t => ({
+        ...t,
+        classes: t.classes.map(c => c.id === 'unassigned'
+          ? { ...c, students: [...c.students, { ...newStudent }] }
+          : c
+        )
+      }))
     }));
 
     setNewStudentNames(prev => ({ ...prev, [classId]: '' }));
   };
 
   const updateStudentName = (classId: string, studentId: string, newName: string) => {
+    // Update student name across ALL themes and ALL classes
     setState(prev => ({
       ...prev,
       themes: prev.themes.map(t => ({
@@ -186,6 +185,7 @@ const Admin: React.FC = () => {
     const name = newThemeName.trim();
     if (!name || state.themes.find(t => t.name === name)) return;
 
+    // Get all unique students from across all themes
     const allStudents = globalStudents.map(s => ({ ...s }));
 
     const newThemeClasses = JSON.parse(JSON.stringify(DEFAULT_CLASSES)).map((c: any) => {
@@ -221,7 +221,10 @@ const Admin: React.FC = () => {
   const handleDrop = (e: React.DragEvent, targetClassId: string) => {
     e.preventDefault();
     setDragOverClassId(null);
-    if (!draggedStudent || draggedStudent.sourceClassId === targetClassId) { setDraggedStudent(null); return; }
+    if (!draggedStudent || draggedStudent.sourceClassId === targetClassId) {
+      setDraggedStudent(null);
+      return;
+    }
     const { studentId, sourceClassId } = draggedStudent;
 
     setState(prev => {
@@ -231,6 +234,7 @@ const Admin: React.FC = () => {
       const student = currentTheme.classes.find(c => c.id === sourceClassId)?.students.find(s => s.id === studentId);
       if (!student) return prev;
 
+      // ONLY modify the current theme, leave other themes unchanged
       return {
         ...prev,
         themes: prev.themes.map(t => t.name === prev.currentWeekTheme
@@ -238,11 +242,11 @@ const Admin: React.FC = () => {
             ...t,
             classes: t.classes.map(c => {
               if (c.id === sourceClassId) return { ...c, students: c.students.filter(s => s.id !== studentId) };
-              if (c.id === targetClassId) return { ...c, students: [...c.students, student] };
+              if (c.id === targetClassId) return { ...c, students: [...c.students, { ...student }] };
               return c;
             })
           }
-          : t
+          : t // Keep other themes exactly as they are
         )
       };
     });
