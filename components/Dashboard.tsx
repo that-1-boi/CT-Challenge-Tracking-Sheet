@@ -298,11 +298,6 @@ const Dashboard: React.FC = () => {
                         <div className="text-sm md:text-base font-black text-black uppercase tracking-tight">
                           {student.name}
                         </div>
-                        <div className="text-[8px] text-gray-500 mt-0.5">
-                          {progress.challenges.length > 0
-                            ? `✓ Progress found: ${progress.challenges.join(', ')}`
-                            : '○ No progress today'}
-                        </div>
                       </td>
                       {[0, 1, 2, 3, 4].map((idx) => {
                         const challengeId = `c${idx + 1}`;
