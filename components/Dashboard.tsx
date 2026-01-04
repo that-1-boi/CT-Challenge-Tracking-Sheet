@@ -19,6 +19,12 @@ const Dashboard: React.FC = () => {
       console.log('Dashboard: Progress data:', loadedState.progress);
       console.log('Dashboard: =====================================');
 
+      // Ensure progress exists as an object
+      if (!loadedState.progress) {
+        console.warn('Dashboard: Progress was null/undefined, initializing to empty object');
+        loadedState.progress = {};
+      }
+
       setState(loadedState);
       setLoading(false);
       isInitialLoad.current = false;
