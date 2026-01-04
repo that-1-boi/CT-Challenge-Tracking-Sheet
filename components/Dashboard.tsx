@@ -7,11 +7,14 @@ const Dashboard: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [loading, setLoading] = useState(true);
   const isInitialLoad = useRef(true);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const previousStateRef = useRef<string>('');
 
   useEffect(() => {
     loadState().then(loadedState => {
       setState(loadedState);
       setLoading(false);
+      previousStateRef.current = JSON.stringify(loadedState);
       isInitialLoad.current = false;
     }).catch(error => {
       console.error('Error loading state:', error);
@@ -26,9 +29,31 @@ const Dashboard: React.FC = () => {
       return;
     }
     
-    saveState(state).catch(error => {
-      console.error('Error saving state:', error);
-    });
+    // Compare with previous state to avoid unnecessary saves
+    const currentStateString = JSON.stringify(state);
+    if (previousStateRef.current === currentStateString) {
+      return;
+    }
+    
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    // Debounce the save operation
+    saveTimeoutRef.current = setTimeout(() => {
+      saveState(state).then(() => {
+        previousStateRef.current = JSON.stringify(state);
+      }).catch(error => {
+        console.error('Error saving state:', error);
+      });
+    }, 500);
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
   }, [state]);
 
   const activeTheme = state?.themes.find(t => t.name === state.currentWeekTheme) || state?.themes[0];

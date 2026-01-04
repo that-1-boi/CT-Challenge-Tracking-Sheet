@@ -17,12 +17,15 @@ const Admin: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadIdx, setActiveUploadIdx] = useState<number | null>(null);
   const isInitialLoad = useRef(true);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const previousStateRef = useRef<string>('');
 
   useEffect(() => {
     loadState().then(loadedState => {
       setState(loadedState);
       setLoading(false);
       setSaveStatus('All changes saved');
+      previousStateRef.current = JSON.stringify(loadedState);
       isInitialLoad.current = false;
     }).catch(error => {
       console.error('Error loading state:', error);
@@ -38,13 +41,34 @@ const Admin: React.FC = () => {
       return;
     }
     
+    // Compare with previous state to avoid unnecessary saves
+    const currentStateString = JSON.stringify(state);
+    if (previousStateRef.current === currentStateString) {
+      return;
+    }
+    
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    // Debounce the save operation
     setSaveStatus('Saving changes...');
-    saveState(state).then(() => {
-      setSaveStatus('All changes saved');
-    }).catch(error => {
-      console.error('Error saving state:', error);
-      setSaveStatus('Error saving changes');
-    });
+    saveTimeoutRef.current = setTimeout(() => {
+      saveState(state).then(() => {
+        setSaveStatus('All changes saved');
+        previousStateRef.current = JSON.stringify(state);
+      }).catch(error => {
+        console.error('Error saving state:', error);
+        setSaveStatus('Error saving changes');
+      });
+    }, 500);
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
   }, [state]);
 
   if (loading || !state) {
@@ -59,6 +83,7 @@ const Admin: React.FC = () => {
   const activeTheme = state.themes.find(t => t.name === state.currentWeekTheme) || state.themes[0];
 
   const globalStudents = useMemo(() => {
+    if (!state) return [];
     const map = new Map<string, Student>();
     state.themes.forEach(t => {
       t.classes.forEach(c => {
@@ -66,7 +91,7 @@ const Admin: React.FC = () => {
       });
     });
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [state]);
+  }, [state?.themes]);
 
   const updateClassName = (classId: string, newName: string) => {
     setState(prev => {
