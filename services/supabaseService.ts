@@ -299,7 +299,7 @@ async function appStateToSupabase(state: AppState): Promise<void> {
             challenges_completed: progress.challengesCompleted,
             timestamp: new Date(progress.timestamp).toISOString(),
           },
-          { onConflict: 'student_id,theme_name' }
+          { onConflict: 'student_id,class_session_id,theme_name' }
         );
 
       if (progressError) {

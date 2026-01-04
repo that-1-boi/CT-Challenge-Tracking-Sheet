@@ -4,62 +4,81 @@ import { AppState, HistoryEntry } from '../types';
 import { loadState, saveState, loadHistory, saveHistory } from '../services/storageService';
 
 const Dashboard: React.FC = () => {
-  const [state, setState] = useState<AppState>(loadState());
+  const [state, setState] = useState<AppState | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    saveState(state);
+    loadState().then(loadedState => {
+      setState(loadedState);
+      setLoading(false);
+    }).catch(error => {
+      console.error('Error loading state:', error);
+      setLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (state) {
+      saveState(state).catch(error => {
+        console.error('Error saving state:', error);
+      });
+    }
   }, [state]);
 
-  const activeTheme = state.themes.find(t => t.name === state.currentWeekTheme) || state.themes[0];
+  const activeTheme = state?.themes.find(t => t.name === state.currentWeekTheme) || state?.themes[0];
   const realClasses = activeTheme?.classes.filter(c => c.id !== 'unassigned') || [];
-  const currentClass = realClasses.find(c => c.id === state.selectedClassId) || realClasses[0];
+  const currentClass = realClasses.find(c => c.id === state?.selectedClassId) || realClasses[0];
 
-  const syncToHistory = (studentId: string, studentName: string, updatedChallenges: string[]) => {
-    if (!currentClass || !activeTheme) return;
+  const syncToHistory = async (studentId: string, studentName: string, updatedChallenges: string[]) => {
+    if (!currentClass || !activeTheme || !state) return;
     
-    const history = loadHistory();
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    
-    const challengeNames = updatedChallenges.map(cid => {
-      const idx = parseInt(cid.substring(1)) - 1;
-      return activeTheme.challenges[idx] || cid;
-    });
+    try {
+      const history = await loadHistory();
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      
+      const challengeNames = updatedChallenges.map(cid => {
+        const idx = parseInt(cid.substring(1)) - 1;
+        return activeTheme.challenges[idx] || cid;
+      });
 
-    const existingEntryIdx = history.findIndex(h => 
-      h.studentName === studentName && 
-      h.className === currentClass.name && 
-      h.weekTheme === state.currentWeekTheme &&
-      h.date.startsWith(todayStr)
-    );
+      const existingEntryIdx = history.findIndex(h => 
+        h.studentName === studentName && 
+        h.className === currentClass.name && 
+        h.weekTheme === state.currentWeekTheme &&
+        h.date.startsWith(todayStr)
+      );
 
-    let newHistory = [...history];
+      let newHistory = [...history];
 
-    if (existingEntryIdx !== -1) {
-      newHistory[existingEntryIdx] = {
-        ...newHistory[existingEntryIdx],
-        challenges: challengeNames,
-        allAvailableChallenges: activeTheme.challenges
-      };
-    } else {
-      const newEntry: HistoryEntry = {
-        id: crypto.randomUUID(),
-        studentName: studentName,
-        className: currentClass.name,
-        weekName: `Session ${now.toLocaleDateString()}`,
-        weekTheme: state.currentWeekTheme,
-        challenges: challengeNames,
-        allAvailableChallenges: activeTheme.challenges,
-        date: now.toISOString()
-      };
-      newHistory.push(newEntry);
+      if (existingEntryIdx !== -1) {
+        newHistory[existingEntryIdx] = {
+          ...newHistory[existingEntryIdx],
+          challenges: challengeNames,
+          allAvailableChallenges: activeTheme.challenges
+        };
+      } else {
+        const newEntry: HistoryEntry = {
+          id: crypto.randomUUID(),
+          studentName: studentName,
+          className: currentClass.name,
+          weekName: `Session ${now.toLocaleDateString()}`,
+          weekTheme: state.currentWeekTheme,
+          challenges: challengeNames,
+          allAvailableChallenges: activeTheme.challenges,
+          date: now.toISOString()
+        };
+        newHistory.push(newEntry);
+      }
+
+      await saveHistory(newHistory);
+    } catch (error) {
+      console.error('Error syncing to history:', error);
     }
-
-    saveHistory(newHistory);
   };
 
   const toggleChallenge = (studentId: string, challengeIdx: number) => {
-    if (!currentClass) return;
+    if (!currentClass || !state) return;
     const student = currentClass.students.find(s => s.id === studentId);
     if (!student) return;
 
@@ -78,18 +97,30 @@ const Dashboard: React.FC = () => {
       ? currentProgress.challengesCompleted.filter(id => id !== challengeId)
       : [...currentProgress.challengesCompleted, challengeId];
 
-    setState(prev => ({
-      ...prev,
-      progress: {
-        ...prev.progress,
-        [progressKey]: { ...currentProgress, challengesCompleted: updatedChallenges }
-      }
-    }));
+    setState(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        progress: {
+          ...prev.progress,
+          [progressKey]: { ...currentProgress, challengesCompleted: updatedChallenges }
+        }
+      };
+    });
 
     syncToHistory(studentId, student.name, updatedChallenges);
   };
 
-  if (!activeTheme || !currentClass) {
+  if (loading) {
+    return (
+      <div className="p-10 text-center">
+        <div className="w-12 h-12 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="font-black uppercase text-sm text-gray-400">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!state || !activeTheme || !currentClass) {
     return <div className="p-10 text-center font-black uppercase text-sm">Session not active</div>;
   }
 
@@ -102,9 +133,9 @@ const Dashboard: React.FC = () => {
                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
                 <span className="bg-black text-[#f4c514] text-[8px] font-black px-1.5 py-0.5 rounded-sm tracking-widest uppercase">Sync Active</span>
             </div>
-            <select 
+              <select 
                 value={currentClass.id}
-                onChange={(e) => setState(prev => ({ ...prev, selectedClassId: e.target.value }))}
+                onChange={(e) => setState(prev => prev ? ({ ...prev, selectedClassId: e.target.value }) : prev)}
                 className="bg-transparent border-b border-black text-[10px] font-bold uppercase tracking-widest text-black outline-none cursor-pointer min-w-[120px]"
               >
                 {realClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -117,7 +148,7 @@ const Dashboard: React.FC = () => {
                 {state.currentWeekTheme}
                 <select 
                    value={state.currentWeekTheme}
-                   onChange={(e) => setState(prev => ({ ...prev, currentWeekTheme: e.target.value }))}
+                   onChange={(e) => setState(prev => prev ? ({ ...prev, currentWeekTheme: e.target.value }) : prev)}
                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 >
                    {state.themes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}

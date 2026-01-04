@@ -4,31 +4,67 @@ import { AppState } from '../types';
 import { loadState, saveState } from '../services/storageService';
 
 const LivePublicView: React.FC = () => {
-  const [state, setState] = useState<AppState>(loadState());
+  const [state, setState] = useState<AppState | null>(null);
+  const [loading, setLoading] = useState(true);
   const [selectedChallenge, setSelectedChallenge] = useState<{name: string, image?: string} | null>(null);
 
   useEffect(() => {
-    const handleStorageChange = () => { setState(loadState()); };
-    window.addEventListener('storage', handleStorageChange);
-    const interval = setInterval(() => { setState(loadState()); }, 1000);
-    return () => { 
-      window.removeEventListener('storage', handleStorageChange); 
-      clearInterval(interval); 
+    const loadData = async () => {
+      try {
+        const loadedState = await loadState();
+        setState(loadedState);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error loading state:', error);
+        setLoading(false);
+      }
+    };
+
+    loadData();
+    
+    // Poll for updates every 2 seconds
+    const interval = setInterval(async () => {
+      try {
+        const loadedState = await loadState();
+        setState(loadedState);
+      } catch (error) {
+        console.error('Error polling state:', error);
+      }
+    }, 2000);
+
+    return () => {
+      clearInterval(interval);
     };
   }, []);
+
+  const handleClassChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!state) return;
+    const newClassId = e.target.value;
+    const newState = { ...state, publicClassId: newClassId };
+    setState(newState);
+    try {
+      await saveState(newState);
+      window.dispatchEvent(new Event('storage'));
+    } catch (error) {
+      console.error('Error saving state:', error);
+    }
+  };
+
+  if (loading || !state) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-white">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-gray-400 font-black uppercase italic tracking-widest text-xs">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   const activeTheme = state.themes.find(t => t.name === state.publicThemeName) || state.themes[0];
   const currentClass = activeTheme?.classes.find(c => c.id === state.publicClassId) || 
                        activeTheme?.classes.find(c => c.id !== 'unassigned') || 
                        activeTheme?.classes[0];
-
-  const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newClassId = e.target.value;
-    const newState = { ...state, publicClassId: newClassId };
-    setState(newState);
-    saveState(newState);
-    window.dispatchEvent(new Event('storage'));
-  };
 
   const openChallengeDetails = (index: number) => {
     if (!activeTheme) return;
