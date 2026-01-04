@@ -2,11 +2,6 @@ import { supabase } from './supabaseClient';
 import { AppState, Theme, ClassSession, Student, StudentProgress, HistoryEntry } from '../types';
 import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
 
-// Check if Supabase is configured
-if (!supabase) {
-  console.warn('Supabase client is not initialized. Please check your environment variables.');
-}
-
 // Database table types
 interface ThemeRow {
   id: string;
@@ -53,11 +48,6 @@ interface AppSettingRow {
 
 // Helper function to get or set app setting
 async function getAppSetting(key: string): Promise<string | null> {
-  if (!supabase) {
-    console.warn('Supabase not configured, returning null for app setting');
-    return null;
-  }
-  
   const { data, error } = await supabase
     .from('app_settings')
     .select('value')
@@ -72,11 +62,6 @@ async function getAppSetting(key: string): Promise<string | null> {
 }
 
 async function setAppSetting(key: string, value: string): Promise<void> {
-  if (!supabase) {
-    console.warn('Supabase not configured, cannot save app setting');
-    return;
-  }
-  
   const { error } = await supabase
     .from('app_settings')
     .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
@@ -88,11 +73,6 @@ async function setAppSetting(key: string, value: string): Promise<void> {
 
 // Convert database rows to AppState
 async function supabaseToAppState(): Promise<AppState> {
-  if (!supabase) {
-    console.warn('Supabase not configured, returning default app state');
-    return getDefaultAppState();
-  }
-  
   try {
     // Fetch all themes
     const { data: themesData, error: themesError } = await supabase
@@ -214,11 +194,6 @@ async function supabaseToAppState(): Promise<AppState> {
 
 // Convert AppState to database operations
 async function appStateToSupabase(state: AppState): Promise<void> {
-  if (!supabase) {
-    console.warn('Supabase not configured, cannot save app state');
-    return;
-  }
-  
   try {
     // 1. Upsert themes
     for (const theme of state.themes) {
@@ -324,7 +299,7 @@ async function appStateToSupabase(state: AppState): Promise<void> {
             challenges_completed: progress.challengesCompleted,
             timestamp: new Date(progress.timestamp).toISOString(),
           },
-          { onConflict: 'student_id,class_session_id,theme_name' }
+          { onConflict: 'student_id,theme_name' }
         );
 
       if (progressError) {
@@ -364,11 +339,6 @@ export const saveState = async (state: AppState): Promise<void> => {
 };
 
 export const loadHistory = async (): Promise<HistoryEntry[]> => {
-  if (!supabase) {
-    console.warn('Supabase not configured, returning empty history');
-    return [];
-  }
-  
   try {
     const { data, error } = await supabase
       .from('history_entries')
@@ -399,11 +369,6 @@ export const loadHistory = async (): Promise<HistoryEntry[]> => {
 };
 
 export const saveHistory = async (history: HistoryEntry[]): Promise<void> => {
-  if (!supabase) {
-    console.warn('Supabase not configured, cannot save history');
-    return;
-  }
-  
   try {
     if (history.length === 0) {
       // Clear all history if empty

@@ -1,33 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
 import { loadHistory, saveHistory, loadState, saveState } from '../services/storageService';
 import { HistoryEntry, AppState } from '../types';
 import * as XLSX from 'xlsx';
 
 const History: React.FC = () => {
-  const location = useLocation();
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [history, setHistory] = useState<HistoryEntry[]>(loadHistory());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('All');
   const [editingEntry, setEditingEntry] = useState<HistoryEntry | null>(null);
-
-  const loadData = async () => {
-    try {
-      const loadedHistory = await loadHistory();
-      setHistory(loadedHistory);
-    } catch (error) {
-      console.error('Error loading history:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    setLoading(true);
-    loadData();
-  }, [location.pathname]); // Reload when route changes
 
   const classes = ['All', ...Array.from(new Set(history.map(h => h.className)))];
 
@@ -37,38 +18,35 @@ const History: React.FC = () => {
     return matchesSearch && matchesClass;
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const handleUpdateEntry = async () => {
+  const handleUpdateEntry = () => {
     if (!editingEntry) return;
-    try {
-      const updatedHistory = history.map(h => h.id === editingEntry.id ? editingEntry : h);
-      setHistory(updatedHistory);
-      await saveHistory(updatedHistory);
-      const appState: AppState = await loadState();
-      const theme = appState.themes.find(t => t.name === editingEntry.weekTheme);
-      if (theme) {
-        const cls = theme.classes.find(c => c.name === editingEntry.className);
-        if (cls) {
-          const student = cls.students.find(s => s.name === editingEntry.studentName);
-          if (student) {
-            const progressKey = `${cls.id}_${student.id}_${theme.name}`;
-            const challengesCompletedIds = editingEntry.challenges.map(name => {
-              const idx = editingEntry.allAvailableChallenges.indexOf(name);
-              return idx !== -1 ? `c${idx + 1}` : null;
-            }).filter(id => id !== null) as string[];
-            appState.progress[progressKey] = {
-              studentId: student.id,
-              studentName: student.name,
-              challengesCompleted: challengesCompletedIds,
-              timestamp: Date.now()
-            };
-            await saveState(appState);
-          }
+    const updatedHistory = history.map(h => h.id === editingEntry.id ? editingEntry : h);
+    setHistory(updatedHistory);
+    saveHistory(updatedHistory);
+    const appState: AppState = loadState();
+    const theme = appState.themes.find(t => t.name === editingEntry.weekTheme);
+    if (theme) {
+      const cls = theme.classes.find(c => c.name === editingEntry.className);
+      if (cls) {
+        const student = cls.students.find(s => s.name === editingEntry.studentName);
+        if (student) {
+          const progressKey = `${cls.id}_${student.id}_${theme.name}`;
+          const challengesCompletedIds = editingEntry.challenges.map(name => {
+            const idx = editingEntry.allAvailableChallenges.indexOf(name);
+            return idx !== -1 ? `c${idx + 1}` : null;
+          }).filter(id => id !== null) as string[];
+          appState.progress[progressKey] = {
+            studentId: student.id,
+            studentName: student.name,
+            challengesCompleted: challengesCompletedIds,
+            timestamp: Date.now()
+          };
+          saveState(appState);
+          window.dispatchEvent(new Event('storage'));
         }
       }
-      setEditingEntry(null);
-    } catch (error) {
-      console.error('Error updating entry:', error);
     }
+    setEditingEntry(null);
   };
 
   const toggleChallengeInEdit = (challengeName: string) => {
@@ -106,15 +84,6 @@ const History: React.FC = () => {
     worksheet['!cols'] = [{ wch: 25 }, ...uniqueThemes.map(() => ({ wch: 30 }))];
     XLSX.writeFile(workbook, `Student_Progress_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
-
-  if (loading) {
-    return (
-      <div className="p-10 text-center">
-        <div className="w-12 h-12 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <div className="font-black uppercase text-sm text-gray-400">Loading...</div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8 max-w-full overflow-hidden">

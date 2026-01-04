@@ -1,67 +1,33 @@
 
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
 import { AppState } from '../types';
 import { loadState, saveState } from '../services/storageService';
-import { DEFAULT_THEMES, DEFAULT_CLASSES } from '../constants';
 
 const LivePublicView: React.FC = () => {
-  const location = useLocation();
-  const [state, setState] = useState<AppState>({
-    themes: DEFAULT_THEMES,
-    currentWeekTheme: DEFAULT_THEMES[0].name,
-    publicThemeName: DEFAULT_THEMES[0].name,
-    publicClassId: DEFAULT_CLASSES[0].id,
-    progress: {},
-    selectedClassId: DEFAULT_CLASSES[0].id,
-  });
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<AppState>(loadState());
   const [selectedChallenge, setSelectedChallenge] = useState<{name: string, image?: string} | null>(null);
 
-  const loadData = async () => {
-    try {
-      const loadedState = await loadState();
-      setState(loadedState);
-    } catch (error) {
-      console.error('Error loading state:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    setLoading(true);
-    loadData();
-  }, [location.pathname]); // Reload when route changes
-
-  useEffect(() => {
-    if (!loading) {
-      const interval = setInterval(async () => {
-        try {
-          const loadedState = await loadState();
-          setState(loadedState);
-        } catch (error) {
-          console.error('Error refreshing state:', error);
-        }
-      }, 2000); // Poll every 2 seconds
-      return () => clearInterval(interval);
-    }
-  }, [loading]);
+    const handleStorageChange = () => { setState(loadState()); };
+    window.addEventListener('storage', handleStorageChange);
+    const interval = setInterval(() => { setState(loadState()); }, 1000);
+    return () => { 
+      window.removeEventListener('storage', handleStorageChange); 
+      clearInterval(interval); 
+    };
+  }, []);
 
   const activeTheme = state.themes.find(t => t.name === state.publicThemeName) || state.themes[0];
   const currentClass = activeTheme?.classes.find(c => c.id === state.publicClassId) || 
                        activeTheme?.classes.find(c => c.id !== 'unassigned') || 
                        activeTheme?.classes[0];
 
-  const handleClassChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newClassId = e.target.value;
     const newState = { ...state, publicClassId: newClassId };
     setState(newState);
-    try {
-      await saveState(newState);
-    } catch (error) {
-      console.error('Error saving state:', error);
-    }
+    saveState(newState);
+    window.dispatchEvent(new Event('storage'));
   };
 
   const openChallengeDetails = (index: number) => {
@@ -71,17 +37,6 @@ const LivePublicView: React.FC = () => {
       image: activeTheme.challengeImages ? activeTheme.challengeImages[index] : undefined
     });
   };
-
-  if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-white">
-        <div className="text-center space-y-4">
-          <div className="w-12 h-12 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-gray-400 font-black uppercase italic tracking-widest text-xs">Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (!activeTheme || !currentClass) {
     return (
