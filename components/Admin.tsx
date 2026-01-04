@@ -537,8 +537,8 @@ const Admin: React.FC = () => {
                   }
                 }}
                 className={`px-4 py-2 rounded-sm text-xs font-black uppercase transition-colors ${isMultiSelectMode
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
               >
                 <i className="fas fa-check-square mr-2"></i>
@@ -582,8 +582,8 @@ const Admin: React.FC = () => {
                             onDragStart={(e) => handleDragStart(e, student.id, cls.id)}
                             onClick={() => isMultiSelectMode && toggleStudentSelection(student.id)}
                             className={`flex items-center justify-between p-2 rounded border text-sm group transition-all ${isMultiSelectMode
-                                ? `cursor-pointer ${isSelected ? 'bg-blue-500 border-blue-600' : 'bg-white/50 border-black/5 hover:bg-blue-100 hover:border-blue-300'}`
-                                : 'bg-white/50 border-black/5 hover:bg-white cursor-grab active:cursor-grabbing hover:border-[#f4c514]'
+                              ? `cursor-pointer ${isSelected ? 'bg-blue-500 border-blue-600' : 'bg-white/50 border-black/5 hover:bg-blue-100 hover:border-blue-300'}`
+                              : 'bg-white/50 border-black/5 hover:bg-white cursor-grab active:cursor-grabbing hover:border-[#f4c514]'
                               }`}
                           >
                             <div className="flex items-center gap-2 flex-1 pointer-events-none">
@@ -605,8 +605,8 @@ const Admin: React.FC = () => {
                               ) : (
                                 <span
                                   className={`font-semibold w-full pointer-events-auto capitalize ${isMultiSelectMode
-                                      ? (isSelected ? 'text-white' : 'text-black')
-                                      : 'text-black cursor-text'
+                                    ? (isSelected ? 'text-white' : 'text-black')
+                                    : 'text-black cursor-text'
                                     }`}
                                   onClick={(e) => {
                                     if (!isMultiSelectMode) {
