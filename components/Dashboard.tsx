@@ -3,7 +3,14 @@ import { AppState, HistoryEntry } from '../types';
 import { loadState, saveState, loadHistory, saveHistory } from '../services/storageService';
 
 const Dashboard: React.FC = () => {
-  const [state, setState] = useState<AppState | null>(null);
+  const [state, setState] = useState<AppState | null>(null); // ✅ Correct
+
+  useEffect(() => {
+    loadState().then(loadedState => {
+      setState(loadedState);
+      setLoading(false);
+    });
+  }, []);
   const [loading, setLoading] = useState(true);
   const isInitialLoad = useRef(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
