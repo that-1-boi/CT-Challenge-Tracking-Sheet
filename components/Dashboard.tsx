@@ -3,91 +3,56 @@ import { AppState, HistoryEntry } from '../types';
 import { loadState, saveState, loadHistory, saveHistory } from '../services/storageService';
 
 const Dashboard: React.FC = () => {
-  const [state, setState] = useState<AppState | null>(null); // ✅ Correct
-
-  useEffect(() => {
-    loadState().then(loadedState => {
-      setState(loadedState);
-      setLoading(false);
-    });
-  }, []);
+  const [state, setState] = useState<AppState | null>(null);
   const [loading, setLoading] = useState(true);
   const isInitialLoad = useRef(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const previousStateRef = useRef<string>('');
 
+  // Load state from database on mount - using .then() like StudentSearch does
   useEffect(() => {
     loadState().then(loadedState => {
       console.log('Dashboard: Loaded state from database', {
         themes: loadedState.themes.length,
-        progressKeys: Object.keys(loadedState.progress).length,
+        progressKeys: Object.keys(loadedState.progress || {}).length,
         currentTheme: loadedState.currentWeekTheme,
-        progress: loadedState.progress
+        progressData: loadedState.progress
       });
       setState(loadedState);
       setLoading(false);
-      // Initialize previous state ref with just the parts we track for saving
-      const stateToCompare = {
-        progress: loadedState.progress,
-        currentWeekTheme: loadedState.currentWeekTheme,
-        publicThemeName: loadedState.publicThemeName,
-        publicClassId: loadedState.publicClassId,
-        selectedClassId: loadedState.selectedClassId,
-      };
-      previousStateRef.current = JSON.stringify(stateToCompare);
       isInitialLoad.current = false;
     }).catch(error => {
-      console.error('Error loading state:', error);
+      console.error('Dashboard: Error loading state:', error);
       setLoading(false);
       isInitialLoad.current = false;
     });
   }, []);
 
+  // Save state to database when it changes (debounced)
   useEffect(() => {
-    // Skip saving on initial load
+    // Skip saving on initial load or if state is null
     if (isInitialLoad.current || !state) {
       return;
     }
-
-    // Compare with previous state to avoid unnecessary saves
-    // Only compare progress and settings, not the entire state (which includes themes/classes that might change)
-    const stateToCompare = {
-      currentWeekTheme: state.currentWeekTheme,
-      publicThemeName: state.publicThemeName,
-      publicClassId: state.publicClassId,
-      selectedClassId: state.selectedClassId,
-      progress: state.progress,
-    };
-    const currentStateString = JSON.stringify(stateToCompare);
-    if (previousStateRef.current === currentStateString) {
-      return;
-    }
-
-    // Update previous state ref immediately to prevent re-triggering
-    previousStateRef.current = currentStateString;
 
     // Clear any pending save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
 
-    // Debounce the save operation
+    // Debounce the save operation (wait 500ms after last change)
     saveTimeoutRef.current = setTimeout(() => {
       console.log('Dashboard: Saving progress to database', {
-        progressKeys: Object.keys(state.progress).length,
-        progress: state.progress
+        progressKeys: Object.keys(state.progress || {}).length,
+        progressData: state.progress
       });
       saveState(state).then(() => {
         console.log('Dashboard: Successfully saved to database');
-        // Update ref after successful save
-        previousStateRef.current = JSON.stringify(stateToCompare);
       }).catch(error => {
-        console.error('Error saving state:', error);
-        // Reset ref on error so it can retry
-        previousStateRef.current = '';
+        console.error('Dashboard: Error saving state:', error);
       });
     }, 500);
 
+    // Cleanup timeout on unmount
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
@@ -95,20 +60,14 @@ const Dashboard: React.FC = () => {
     };
   }, [state]);
 
-  // Get the active theme based on currentWeekTheme
   const activeTheme = state?.themes.find(t => t.name === state.currentWeekTheme);
-
-  // Get real classes (excluding unassigned)
   const realClasses = activeTheme?.classes.filter(c => c.id !== 'unassigned') || [];
-
-  // Get current class - use selectedClassId if valid, otherwise use first real class
   const currentClass = realClasses.find(c => c.id === state?.selectedClassId) || realClasses[0];
 
-  const syncToHistory = async (studentId: string, studentName: string, updatedChallenges: string[]) => {
+  const syncToHistory = (studentId: string, studentName: string, updatedChallenges: string[]) => {
     if (!currentClass || !activeTheme || !state) return;
 
-    try {
-      const history = await loadHistory();
+    loadHistory().then(history => {
       const now = new Date();
       const todayStr = now.toISOString().split('T')[0];
 
@@ -146,11 +105,11 @@ const Dashboard: React.FC = () => {
         newHistory.push(newEntry);
       }
 
-      await saveHistory(newHistory);
+      saveHistory(newHistory);
       console.log('Dashboard: Synced to history', { studentName, challenges: challengeNames });
-    } catch (error) {
-      console.error('Error syncing to history:', error);
-    }
+    }).catch(error => {
+      console.error('Dashboard: Error syncing to history:', error);
+    });
   };
 
   const toggleChallenge = (studentId: string, challengeIdx: number) => {
@@ -161,24 +120,26 @@ const Dashboard: React.FC = () => {
     const progressKey = `${currentClass.id}_${studentId}_${state.currentWeekTheme}`;
     const challengeId = `c${challengeIdx + 1}`;
 
-    const currentProgress = state.progress[progressKey] || {
+    // Initialize progress object if it doesn't exist
+    const currentProgress = state.progress?.[progressKey] || {
       studentId,
       studentName: student.name,
       challengesCompleted: [],
       timestamp: Date.now()
     };
 
-    const isCompleted = currentProgress.challengesCompleted.includes(challengeId);
+    const isCompleted = currentProgress.challengesCompleted?.includes(challengeId) || false;
     const updatedChallenges = isCompleted
       ? currentProgress.challengesCompleted.filter(id => id !== challengeId)
-      : [...currentProgress.challengesCompleted, challengeId];
+      : [...(currentProgress.challengesCompleted || []), challengeId];
 
     console.log('Dashboard: Toggling challenge', {
       progressKey,
       studentName: student.name,
       challengeId,
-      isCompleted,
-      updatedChallenges
+      wasCompleted: isCompleted,
+      newChallenges: updatedChallenges,
+      currentProgress
     });
 
     setState(prev => {
@@ -186,7 +147,7 @@ const Dashboard: React.FC = () => {
       return {
         ...prev,
         progress: {
-          ...prev.progress,
+          ...(prev.progress || {}),
           [progressKey]: {
             ...currentProgress,
             challengesCompleted: updatedChallenges,
@@ -203,7 +164,7 @@ const Dashboard: React.FC = () => {
     return (
       <div className="p-10 text-center">
         <div className="w-12 h-12 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="font-black uppercase text-sm text-gray-400">Loading...</p>
+        <p className="font-black uppercase text-sm text-gray-400">Loading Progress...</p>
       </div>
     );
   }
@@ -215,7 +176,7 @@ const Dashboard: React.FC = () => {
           <i className="fas fa-exclamation-triangle text-amber-600 text-2xl mb-3"></i>
           <p className="font-black uppercase text-sm text-amber-900">Session Not Active</p>
           <p className="text-xs text-amber-700 mt-2">
-            {!activeTheme ? 'No theme found' : 'No classes available'}
+            {!state ? 'Loading...' : !activeTheme ? 'No theme found' : 'No classes available'}
           </p>
         </div>
       </div>
@@ -233,10 +194,7 @@ const Dashboard: React.FC = () => {
             </div>
             <select
               value={currentClass.id}
-              onChange={(e) => {
-                console.log('Dashboard: Changing class to', e.target.value);
-                setState(prev => prev ? ({ ...prev, selectedClassId: e.target.value }) : prev);
-              }}
+              onChange={(e) => setState(prev => prev ? ({ ...prev, selectedClassId: e.target.value }) : prev)}
               className="bg-transparent border-b border-black text-[10px] font-bold uppercase tracking-widest text-black outline-none cursor-pointer min-w-[120px]"
             >
               {realClasses.map(c => (
@@ -251,10 +209,7 @@ const Dashboard: React.FC = () => {
                 {state.currentWeekTheme}
                 <select
                   value={state.currentWeekTheme}
-                  onChange={(e) => {
-                    console.log('Dashboard: Changing theme to', e.target.value);
-                    setState(prev => prev ? ({ ...prev, currentWeekTheme: e.target.value }) : prev);
-                  }}
+                  onChange={(e) => setState(prev => prev ? ({ ...prev, currentWeekTheme: e.target.value }) : prev)}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 >
                   {state.themes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
@@ -276,16 +231,25 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Debug info - remove in production */}
-      {Object.keys(state.progress).length > 0 && (
+      {/* Debug Info */}
+      {state.progress && Object.keys(state.progress).length > 0 && (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-sm text-xs">
-          <div className="font-bold text-blue-900 mb-1">Debug: Progress Keys Found</div>
-          <div className="text-blue-700 space-y-1">
-            {Object.keys(state.progress).map(key => (
-              <div key={key} className="font-mono text-[10px]">
-                {key}: {state.progress[key].challengesCompleted.join(', ') || 'none'}
+          <div className="font-bold text-blue-900 mb-2 flex items-center gap-2">
+            <i className="fas fa-database"></i>
+            Debug: Progress Data in Database
+          </div>
+          <div className="text-blue-700 space-y-1 max-h-40 overflow-y-auto">
+            {Object.entries(state.progress).map(([key, value]) => (
+              <div key={key} className="font-mono text-[10px] bg-white/50 p-1.5 rounded border border-blue-100">
+                <div className="font-bold text-blue-900">{key}</div>
+                <div className="text-blue-600 ml-2">
+                  Student: {value.studentName} | Completed: [{value.challengesCompleted?.join(', ') || 'none'}]
+                </div>
               </div>
             ))}
+          </div>
+          <div className="mt-2 text-[9px] text-blue-600 italic">
+            ✓ Total progress records: {Object.keys(state.progress).length}
           </div>
         </div>
       )}
@@ -323,19 +287,26 @@ const Dashboard: React.FC = () => {
               ) : (
                 currentClass.students.map((student) => {
                   const progKey = `${currentClass.id}_${student.id}_${state.currentWeekTheme}`;
-                  const prog = state.progress[progKey];
-                  const completedCount = prog?.challengesCompleted.length || 0;
+                  const prog = state.progress?.[progKey];
+                  const completedCount = prog?.challengesCompleted?.length || 0;
                   const percent = (completedCount / 5) * 100;
+
+                  console.log('Rendering student row', {
+                    studentName: student.name,
+                    progKey,
+                    hasProgress: !!prog,
+                    completedChallenges: prog?.challengesCompleted || []
+                  });
 
                   return (
                     <tr key={student.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50/50 group">
                       <td className="p-2 md:p-3 border-r border-slate-100 text-sm md:text-base font-black text-black uppercase tracking-tight whitespace-nowrap">
                         {student.name}
-                        <span className="ml-2 text-[8px] text-gray-400 font-mono">{student.id.slice(0, 8)}</span>
+                        <div className="text-[8px] text-gray-400 font-mono font-normal">{progKey}</div>
                       </td>
                       {[0, 1, 2, 3, 4].map((idx) => {
                         const challengeId = `c${idx + 1}`;
-                        const isDone = prog?.challengesCompleted.includes(challengeId);
+                        const isDone = prog?.challengesCompleted?.includes(challengeId) || false;
                         return (
                           <td
                             key={idx}
@@ -356,7 +327,7 @@ const Dashboard: React.FC = () => {
                       })}
                       <td className="p-2 md:p-3 text-center bg-slate-50/50 font-black text-black text-[10px]">
                         {Math.round(percent)}%
-                        <div className="text-[8px] text-gray-400 font-mono">{completedCount}/5</div>
+                        <div className="text-[8px] text-gray-400 font-normal">{completedCount}/5</div>
                       </td>
                     </tr>
                   );
