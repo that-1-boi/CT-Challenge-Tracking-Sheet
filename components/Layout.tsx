@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import logo from './logo.png';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
@@ -33,7 +34,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         <div className="mb-auto flex flex-col items-center gap-6 w-full px-2">
           {/* Logo*/}
           <div className="w-10 h-10 md:w-14 md:h-14 bg-black flex items-center justify-center rounded-sm overflow-hidden border border-gray-800 shadow-inner group cursor-pointer" onClick={() => navigate('/')}>
-            <img src="logo.png" />
+            <img src={logo} alt="Logo" className="w-full h-full object-contain" />
           </div>
 
           <nav className="flex flex-col gap-6 md:gap-8">

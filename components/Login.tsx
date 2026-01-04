@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import logo from './logo.png';
 
 const Login: React.FC = () => {
   const [password, setPassword] = useState('');
@@ -37,7 +38,7 @@ const Login: React.FC = () => {
         <div className="bg-black p-12 shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)] border-b-8 border-[#f4c514] rounded-sm">
           <div className="mb-8 text-center">
             <div className="w-20 h-20 bg-[#f4c514] mx-auto flex items-center justify-center rounded-sm mb-6 rotate-3">
-              <img src="logo.png" />
+              <img src={logo} alt="Logo" className="w-full h-full object-contain" />
             </div>
             <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter">Coach <span className="text-[#f4c514]">Portal</span></h1>
             <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mt-2">Access Restricted to Faculty</p>
