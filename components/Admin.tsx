@@ -1,12 +1,19 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppState, Theme, Student } from '../types';
 import { loadState, saveState } from '../services/storageService';
-import { DEFAULT_CLASSES } from '../constants';
+import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
 
 const Admin: React.FC = () => {
-  const [state, setState] = useState<AppState | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<AppState>({
+    themes: DEFAULT_THEMES,
+    currentWeekTheme: DEFAULT_THEMES[0].name,
+    publicThemeName: DEFAULT_THEMES[0].name,
+    publicClassId: DEFAULT_CLASSES[0].id,
+    progress: {},
+    selectedClassId: DEFAULT_CLASSES[0].id,
+  });
+  const [isLoading, setIsLoading] = useState(true);
   const [draggedStudent, setDraggedStudent] = useState<{ studentId: string; sourceClassId: string } | null>(null);
   const [dragOverClassId, setDragOverClassId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<string>('Loading...');
@@ -16,110 +23,51 @@ const Admin: React.FC = () => {
   const [newThemeName, setNewThemeName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadIdx, setActiveUploadIdx] = useState<number | null>(null);
-  const isInitialLoad = useRef(true);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const previousStateRef = useRef<string>('');
-  const isSavingRef = useRef(false);
 
   useEffect(() => {
+    // Load state on mount
     loadState().then(loadedState => {
-      console.log('Admin: Loaded state from database', {
-        themes: loadedState.themes.length,
-        progressKeys: Object.keys(loadedState.progress).length,
-        currentTheme: loadedState.currentWeekTheme
-      });
       setState(loadedState);
-      setLoading(false);
+      setIsLoading(false);
       setSaveStatus('All changes saved');
-      previousStateRef.current = JSON.stringify(loadedState);
-      isInitialLoad.current = false;
-    }).catch(error => {
-      console.error('Error loading state:', error);
-      setLoading(false);
-      setSaveStatus('Error loading data');
-      isInitialLoad.current = false;
     });
   }, []);
 
   useEffect(() => {
-    // Skip saving on initial load or if already saving
-    if (isInitialLoad.current || !state || isSavingRef.current) {
-      return;
-    }
-    
-    // Compare with previous state to avoid unnecessary saves
-    const currentStateString = JSON.stringify(state);
-    if (previousStateRef.current === currentStateString) {
-      return;
-    }
-    
-    // Update previous state ref immediately to prevent re-triggering
-    previousStateRef.current = currentStateString;
-    
-    // Clear any pending save
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    
-    // Debounce the save operation
-    saveTimeoutRef.current = setTimeout(() => {
-      isSavingRef.current = true;
+    // Save state when it changes (but not on initial load)
+    if (!isLoading) {
       setSaveStatus('Saving changes...');
-      saveState(state).then(() => {
-        setSaveStatus('All changes saved');
-        isSavingRef.current = false;
-      }).catch(error => {
-        console.error('Error saving state:', error);
-        setSaveStatus('Error saving changes');
-        isSavingRef.current = false;
-      });
-    }, 500);
-    
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [state]);
-
-  if (loading || !state) {
-    return (
-      <div className="p-10 text-center">
-        <div className="w-12 h-12 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="font-black uppercase text-sm text-gray-400">Loading...</p>
-      </div>
-    );
-  }
+      saveState(state)
+        .then(() => {
+          setSaveStatus('All changes saved');
+        })
+        .catch(err => {
+          console.error('Error saving state:', err);
+          setSaveStatus('Error saving');
+        });
+    }
+  }, [state, isLoading]);
 
   const activeTheme = state.themes.find(t => t.name === state.currentWeekTheme) || state.themes[0];
 
-  // Calculate global students directly - simple enough that memoization isn't needed
-  const globalStudents = (() => {
-    if (!state || !state.themes) return [];
+  const globalStudents = useMemo(() => {
     const map = new Map<string, Student>();
     state.themes.forEach(t => {
-      if (t.classes) {
-        t.classes.forEach(c => {
-          if (c.students) {
-            c.students.forEach(s => map.set(s.id, s));
-          }
-        });
-      }
+      t.classes.forEach(c => {
+        c.students.forEach(s => map.set(s.id, s));
+      });
     });
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  })();
+  }, [state]);
 
   const updateClassName = (classId: string, newName: string) => {
-    setState(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        themes: prev.themes.map(t => t.name === prev.currentWeekTheme 
-          ? { ...t, classes: t.classes.map(c => c.id === classId ? { ...c, name: newName } : c) } 
-          : t
-        )
-      };
-    });
+    setState(prev => ({
+      ...prev,
+      themes: prev.themes.map(t => t.name === prev.currentWeekTheme 
+        ? { ...t, classes: t.classes.map(c => c.id === classId ? { ...c, name: newName } : c) } 
+        : t
+      )
+    }));
   };
 
   const handleAddStudent = (classId: string) => {
@@ -128,52 +76,43 @@ const Admin: React.FC = () => {
     
     const newStudent: Student = { id: crypto.randomUUID(), name };
 
-    setState(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        themes: prev.themes.map(t => {
-          return {
-            ...t,
-            classes: t.classes.map(c => c.id === 'unassigned'
-              ? { ...c, students: [...c.students, newStudent] }
-              : c
-            )
-          };
-        })
-      };
-    });
+    setState(prev => ({
+      ...prev,
+      themes: prev.themes.map(t => {
+        return {
+          ...t,
+          classes: t.classes.map(c => c.id === 'unassigned'
+            ? { ...c, students: [...c.students, newStudent] }
+            : c
+          )
+        };
+      })
+    }));
     
     setNewStudentNames(prev => ({ ...prev, [classId]: '' }));
   };
 
   const updateStudentName = (classId: string, studentId: string, newName: string) => {
-    setState(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        themes: prev.themes.map(t => ({
-          ...t,
-          classes: t.classes.map(c => ({
-            ...c,
-            students: c.students.map(s => s.id === studentId ? { ...s, name: newName } : s)
-          }))
+    setState(prev => ({
+      ...prev,
+      themes: prev.themes.map(t => ({
+        ...t,
+        classes: t.classes.map(c => ({
+          ...c,
+          students: c.students.map(s => s.id === studentId ? { ...s, name: newName } : s)
         }))
-      };
-    });
+      }))
+    }));
   };
 
   const updateThemeChallengeName = (index: number, newName: string) => {
-    setState(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        themes: prev.themes.map(t => t.name === prev.currentWeekTheme 
-          ? { ...t, challenges: t.challenges.map((ch, i) => i === index ? newName : ch) } 
-          : t
-        )
-      };
-    });
+    setState(prev => ({
+      ...prev,
+      themes: prev.themes.map(t => t.name === prev.currentWeekTheme 
+        ? { ...t, challenges: t.challenges.map((ch, i) => i === index ? newName : ch) } 
+        : t
+      )
+    }));
   };
 
   const handleImageUpload = (index: number) => {
@@ -192,20 +131,17 @@ const Admin: React.FC = () => {
           const reader = new FileReader();
           reader.onloadend = () => {
             const base64String = reader.result as string;
-            setState(prev => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                themes: prev.themes.map(t => {
-                  if (t.name === prev.currentWeekTheme) {
-                    const newImages = [...(t.challengeImages || ['', '', '', '', ''])];
-                    newImages[index] = base64String;
-                    return { ...t, challengeImages: newImages };
-                  }
-                  return t;
-                })
-              };
-            });
+            setState(prev => ({
+              ...prev,
+              themes: prev.themes.map(t => {
+                if (t.name === prev.currentWeekTheme) {
+                  const newImages = [...(t.challengeImages || ['', '', '', '', ''])];
+                  newImages[index] = base64String;
+                  return { ...t, challengeImages: newImages };
+                }
+                return t;
+              })
+            }));
             setSaveStatus('Image pasted successfully!');
             setTimeout(() => setSaveStatus('All changes saved'), 2000);
           };
@@ -221,20 +157,17 @@ const Admin: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64String = reader.result as string;
-        setState(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            themes: prev.themes.map(t => {
-              if (t.name === prev.currentWeekTheme) {
-                const newImages = [...(t.challengeImages || ['', '', '', '', ''])];
-                newImages[activeUploadIdx] = base64String;
-                return { ...t, challengeImages: newImages };
-              }
-              return t;
-            })
-          };
-        });
+        setState(prev => ({
+          ...prev,
+          themes: prev.themes.map(t => {
+            if (t.name === prev.currentWeekTheme) {
+              const newImages = [...(t.challengeImages || ['', '', '', '', ''])];
+              newImages[activeUploadIdx] = base64String;
+              return { ...t, challengeImages: newImages };
+            }
+            return t;
+          })
+        }));
         setActiveUploadIdx(null);
       };
       reader.readAsDataURL(file);
@@ -242,15 +175,14 @@ const Admin: React.FC = () => {
   };
 
   const selectActiveTheme = (themeName: string) => {
-    setState(prev => prev ? ({ ...prev, currentWeekTheme: themeName }) : prev);
+    setState(prev => ({ ...prev, currentWeekTheme: themeName }));
   };
 
   const setPublicTheme = (themeName: string) => {
-    setState(prev => prev ? ({ ...prev, publicThemeName: themeName }) : prev);
+    setState(prev => ({ ...prev, publicThemeName: themeName }));
   };
 
   const createNewTheme = () => {
-    if (!state) return;
     const name = newThemeName.trim();
     if (!name || state.themes.find(t => t.name === name)) return;
     
@@ -268,14 +200,11 @@ const Admin: React.FC = () => {
       classes: newThemeClasses
     };
 
-    setState(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        themes: [...prev.themes, newTheme],
-        currentWeekTheme: name
-      };
-    });
+    setState(prev => ({
+      ...prev,
+      themes: [...prev.themes, newTheme],
+      currentWeekTheme: name
+    }));
     setNewThemeName('');
   };
 
@@ -296,7 +225,6 @@ const Admin: React.FC = () => {
     const { studentId, sourceClassId } = draggedStudent;
     
     setState(prev => {
-      if (!prev) return prev;
       const currentTheme = prev.themes.find(t => t.name === prev.currentWeekTheme);
       if (!currentTheme) return prev;
       
