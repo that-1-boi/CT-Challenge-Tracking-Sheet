@@ -255,38 +255,6 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Debug Panel */}
-      {history.length > 0 && (
-        <div className="mb-4 p-4 bg-blue-50 border-2 border-blue-300 rounded-sm">
-          <div className="flex items-center justify-between mb-3">
-            <div className="font-bold text-blue-900 flex items-center gap-2">
-              <i className="fas fa-database"></i>
-              History Data (Reading from history_entries table)
-            </div>
-            <div className="text-xs text-blue-600">
-              {history.length} records found
-            </div>
-          </div>
-          <div className="text-blue-700 space-y-2 max-h-48 overflow-y-auto bg-white/50 p-3 rounded border border-blue-200">
-            {history.slice(0, 10).map((entry) => (
-              <div key={entry.id} className="font-mono text-[10px] bg-blue-100 p-2 rounded">
-                <div className="font-bold text-blue-900 mb-1">
-                  {entry.studentName} - {entry.className} - {entry.weekTheme}
-                </div>
-                <div className="text-blue-700 ml-3">
-                  Completed: [{entry.challenges.join(', ') || 'none'}] ({entry.challenges.length}/5)
-                </div>
-              </div>
-            ))}
-            {history.length > 10 && (
-              <div className="text-[9px] text-blue-600 italic text-center">
-                ...and {history.length - 10} more entries
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       <div className="bg-white shadow-xl rounded-sm overflow-hidden border border-slate-100">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
