@@ -11,23 +11,18 @@ export const DEFAULT_CLASSES: ClassSession[] = [
 
 export const DEFAULT_THEMES: Theme[] = [
   {
-    name: 'Robotics Workshop',
-    challenges: ['Build Base', 'Wire Sensors', 'Simple Path', 'Avoid Walls', 'Remote Control'],
+    name: 'Pneumatic Configs & Basic Claw',
+    challenges: ['4 Cylinder Configuration', 'Programming', 'Basic Claw', 'Pin Pickup', 'Beam Pickup'],
     classes: JSON.parse(JSON.stringify(DEFAULT_CLASSES))
   },
   {
-    name: 'Advanced Sensors',
-    challenges: ['Line Follow', 'Color Match', 'Distance Stop', 'Maze Solver', 'Speed Test'],
+    name: 'Autonnomous Basics',
+    challenges: ['Right Square', 'Left Square', '4 Square Butterfly', 'Triangle', 'Hexagon'],
     classes: JSON.parse(JSON.stringify(DEFAULT_CLASSES))
   },
   {
-    name: 'Coding Fundamentals',
-    challenges: ['Loops 101', 'If Statements', 'Variables', 'Function Fun', 'Debug Master'],
-    classes: JSON.parse(JSON.stringify(DEFAULT_CLASSES))
-  },
-  {
-    name: 'Game Design',
-    challenges: ['Character Move', 'Collision', 'Score System', 'Level 2', 'Boss Fight'],
+    name: 'Momentun Turn',
+    challenges: ['Right Square', 'Left Square', '4 Square Butterfly', 'Triangle', 'Hexagon'],
     classes: JSON.parse(JSON.stringify(DEFAULT_CLASSES))
   }
 ];
