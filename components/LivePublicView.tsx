@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppState, HistoryEntry } from '../types';
 import { loadState, saveState, loadHistory } from '../services/storageService';
 
@@ -7,6 +7,9 @@ const LivePublicView: React.FC = () => {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChallenge, setSelectedChallenge] = useState<{ name: string, image?: string } | null>(null);
+  
+  // Track user's manual class selection separately
+  const userSelectedClassId = useRef<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -28,7 +31,17 @@ const LivePublicView: React.FC = () => {
     const interval = setInterval(async () => {
       try {
         const [loadedState, loadedHistory] = await Promise.all([loadState(), loadHistory()]);
-        setState(loadedState);
+        
+        // If user has manually selected a class, preserve it
+        if (userSelectedClassId.current) {
+          setState({
+            ...loadedState,
+            publicClassId: userSelectedClassId.current
+          });
+        } else {
+          setState(loadedState);
+        }
+        
         setHistory(loadedHistory);
       } catch (error) {
         console.error('Error polling state:', error);
@@ -43,8 +56,13 @@ const LivePublicView: React.FC = () => {
   const handleClassChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     if (!state) return;
     const newClassId = e.target.value;
+    
+    // Store user's selection in ref
+    userSelectedClassId.current = newClassId;
+    
     const newState = { ...state, publicClassId: newClassId };
     setState(newState);
+    
     try {
       await saveState(newState);
       window.dispatchEvent(new Event('storage'));
