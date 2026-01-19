@@ -71,19 +71,19 @@ const Admin: React.FC = () => {
 
     const newStudent: Student = { id: crypto.randomUUID(), name };
 
-    // Add student to the specified class in the CURRENT theme only
+    // Add student to the "unassigned" class in ALL themes
     setState(prev => ({
       ...prev,
-      themes: prev.themes.map(t => t.name === prev.currentWeekTheme
-        ? {
-            ...t,
-            classes: t.classes.map(c => c.id === classId
-              ? { ...c, students: [...c.students, { ...newStudent }] }
-              : c
-            )
+      themes: prev.themes.map(t => ({
+        ...t,
+        classes: t.classes.map(c => {
+          // Add to unassigned in all themes
+          if (c.id === 'unassigned') {
+            return { ...c, students: [...c.students, { ...newStudent }] };
           }
-        : t
-      )
+          return c;
+        })
+      }))
     }));
 
     setNewStudentNames(prev => ({ ...prev, [classId]: '' }));
