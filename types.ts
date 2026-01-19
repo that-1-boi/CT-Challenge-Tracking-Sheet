@@ -1,6 +1,7 @@
 
 export interface Theme {
   name: string;
+  isActive?: boolean; // Whether this theme is active (students should be auto-added to progress tracking)
   challenges: string[]; // List of 5 challenge names associated with this theme
   challengeImages?: string[]; // Optional list of 5 base64 image strings for each challenge
   classes: ClassSession[]; // Rosters are now scoped specifically to each theme

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, Theme, Student } from '../types';
-import { loadState, saveState, getAllStudentsFromDB } from '../services/storageService';
+import { loadState, saveState, getAllStudentsFromDB, deleteStudent, deleteTheme, ensureProgressForActiveThemes } from '../services/storageService';
 import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
 
 const Admin: React.FC = () => {
@@ -43,6 +43,10 @@ const Admin: React.FC = () => {
     if (!isLoading) {
       setSaveStatus('Saving changes...');
       saveState(state)
+        .then(() => {
+          // After saving, ensure progress entries for active themes
+          return ensureProgressForActiveThemes(state);
+        })
         .then(() => {
           setSaveStatus('All changes saved');
         })
@@ -241,6 +245,7 @@ const Admin: React.FC = () => {
 
     const newTheme: Theme = {
       name,
+      isActive: false,
       challenges: ['Challenge 1', 'Challenge 2', 'Challenge 3', 'Challenge 4', 'Challenge 5'],
       challengeImages: ['', '', '', '', ''],
       classes: newThemeClasses
@@ -252,6 +257,78 @@ const Admin: React.FC = () => {
       currentWeekTheme: name
     }));
     setNewThemeName('');
+  };
+
+  const toggleThemeActive = (themeName: string) => {
+    setState(prev => ({
+      ...prev,
+      themes: prev.themes.map(t =>
+        t.name === themeName ? { ...t, isActive: !t.isActive } : t
+      )
+    }));
+  };
+
+  const handleDeleteStudent = async (studentId: string, studentName: string) => {
+    if (!confirm(`Are you sure you want to delete "${studentName}" from the entire database? This will remove all their progress and cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setSaveStatus('Deleting student...');
+      await deleteStudent(studentId);
+
+      // Remove student from all themes in state
+      setState(prev => ({
+        ...prev,
+        themes: prev.themes.map(theme => ({
+          ...theme,
+          classes: theme.classes.map(cls => ({
+            ...cls,
+            students: cls.students.filter(s => s.id !== studentId)
+          }))
+        }))
+      }));
+
+      setSaveStatus('Student deleted');
+      setTimeout(() => setSaveStatus('All changes saved'), 2000);
+    } catch (error) {
+      console.error('Error deleting student:', error);
+      setSaveStatus('Error deleting student');
+      alert('Failed to delete student. Please try again.');
+    }
+  };
+
+  const handleDeleteTheme = async (themeName: string) => {
+    if (!confirm(`Are you sure you want to delete theme "${themeName}" from the entire database? This will remove all assignments and progress for this theme and cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setSaveStatus('Deleting theme...');
+      await deleteTheme(themeName);
+
+      // Remove theme from state
+      setState(prev => {
+        const newThemes = prev.themes.filter(t => t.name !== themeName);
+        return {
+          ...prev,
+          themes: newThemes,
+          currentWeekTheme: prev.currentWeekTheme === themeName
+            ? (newThemes[0]?.name || DEFAULT_THEMES[0].name)
+            : prev.currentWeekTheme,
+          publicThemeName: prev.publicThemeName === themeName
+            ? (newThemes[0]?.name || DEFAULT_THEMES[0].name)
+            : prev.publicThemeName
+        };
+      });
+
+      setSaveStatus('Theme deleted');
+      setTimeout(() => setSaveStatus('All changes saved'), 2000);
+    } catch (error) {
+      console.error('Error deleting theme:', error);
+      setSaveStatus('Error deleting theme');
+      alert('Failed to delete theme. Please try again.');
+    }
   };
 
   // Toggle student selection for bulk operations
@@ -542,6 +619,19 @@ const Admin: React.FC = () => {
                                 </span>
                               )}
                             </div>
+                            {!bulkAssignMode && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteStudent(student.id, student.name);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 pointer-events-auto transition-opacity text-red-600 hover:text-red-800 p-1"
+                                title="Delete student from database"
+                              >
+                                <i className="fas fa-trash text-xs"></i>
+                              </button>
+                            )}
                           </div>
                         );
                       })}
@@ -580,7 +670,19 @@ const Admin: React.FC = () => {
 
             <div className="bg-[#fff1d1] border border-[#ffe5a0] p-8 shadow-md space-y-6">
               <div className="space-y-4">
-                <label className="text-xs font-extrabold text-black uppercase tracking-tighter block">Weeks</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold text-black uppercase tracking-tighter block">Weeks</label>
+                  <div className="flex items-center gap-3 text-[10px]">
+                    <span className="flex items-center gap-1">
+                      <i className="fas fa-check-circle text-green-500"></i>
+                      <span className="text-gray-600">Active</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <i className="fas fa-circle text-gray-400"></i>
+                      <span className="text-gray-600">Inactive</span>
+                    </span>
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -593,7 +695,7 @@ const Admin: React.FC = () => {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {state.themes.map((theme) => (
-                    <div key={theme.name} className={`flex items-center border rounded-sm overflow-hidden transition-all ${state.currentWeekTheme === theme.name ? 'border-black bg-[#f4c514]' : 'border-[#ffe5a0] bg-white/60'}`}>
+                    <div key={theme.name} className={`flex items-center border rounded-sm overflow-hidden transition-all group/theme ${state.currentWeekTheme === theme.name ? 'border-black bg-[#f4c514]' : 'border-[#ffe5a0] bg-white/60'}`}>
                       {editingThemeName === theme.name ? (
                         <input
                           autoFocus
@@ -608,14 +710,32 @@ const Admin: React.FC = () => {
                           className="px-3 py-1 text-[10px] font-black uppercase bg-transparent border-none outline-none text-black w-32"
                         />
                       ) : (
-                        <span
-                          className={`px-3 py-1 text-[10px] font-black uppercase cursor-pointer ${state.currentWeekTheme === theme.name ? 'text-black' : 'text-gray-600'}`}
-                          onClick={() => selectActiveTheme(theme.name)}
-                          onDoubleClick={() => startEditingTheme(theme.name)}
-                          title="Double-click to edit"
-                        >
-                          {theme.name}
-                        </span>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => toggleThemeActive(theme.name)}
+                            className={`px-2 py-1 transition-colors ${theme.isActive ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'}`}
+                            title={theme.isActive ? 'Active - Click to deactivate' : 'Inactive - Click to activate'}
+                          >
+                            <i className={`fas ${theme.isActive ? 'fa-check-circle' : 'fa-circle'} text-[10px]`}></i>
+                          </button>
+                          <span
+                            className={`px-3 py-1 text-[10px] font-black uppercase cursor-pointer ${state.currentWeekTheme === theme.name ? 'text-black' : 'text-gray-600'}`}
+                            onClick={() => selectActiveTheme(theme.name)}
+                            onDoubleClick={() => startEditingTheme(theme.name)}
+                            title="Click to select, double-click to edit"
+                          >
+                            {theme.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTheme(theme.name)}
+                            className="px-2 py-1 opacity-0 group-hover/theme:opacity-100 transition-opacity text-red-600 hover:text-red-800"
+                            title="Delete theme from database"
+                          >
+                            <i className="fas fa-trash text-[10px]"></i>
+                          </button>
+                        </>
                       )}
                     </div>
                   ))}
@@ -656,14 +776,24 @@ const Admin: React.FC = () => {
               )}
             </div>
 
-            <div className="bg-black p-8 rounded-sm shadow-xl text-center">
-              <i className="fas fa-info-circle text-[#f4c514] mb-3 text-xl"></i>
-              <p className="text-white font-black uppercase text-xs italic tracking-widest">Roster Instructions</p>
-              <p className="text-gray-400 text-[10px] mt-2 leading-relaxed">
-                1. Add all students to the <b>Unassigned</b> pool first.<br />
-                2. Drag and drop students individually OR use <b>Bulk Assign</b> to move multiple students at once.<br />
-                3. Click the <b>Image</b> icon OR focus the name field and <b>Ctrl+V</b> to paste an image for each challenge.
-              </p>
+            <div className="bg-black p-8 rounded-sm shadow-xl text-center space-y-6">
+              <div>
+                <i className="fas fa-info-circle text-[#f4c514] mb-3 text-xl"></i>
+                <p className="text-white font-black uppercase text-xs italic tracking-widest">Roster Instructions</p>
+                <p className="text-gray-400 text-[10px] mt-2 leading-relaxed">
+                  1. Add all students to the <b>Unassigned</b> pool first.<br />
+                  2. Drag and drop students individually OR use <b>Bulk Assign</b> to move multiple students at once.<br />
+                  3. Click the <b>Image</b> icon OR focus the name field and <b>Ctrl+V</b> to paste an image for each challenge.
+                </p>
+              </div>
+              <div className="border-t border-[#f4c514]/30 pt-6">
+                <i className="fas fa-lightbulb text-[#f4c514] mb-3 text-xl"></i>
+                <p className="text-white font-black uppercase text-xs italic tracking-widest">Active Themes</p>
+                <p className="text-gray-400 text-[10px] mt-2 leading-relaxed">
+                  Mark themes as <b className="text-green-400">Active</b> to automatically create progress tracking entries for all assigned students.<br />
+                  Students in active themes will appear in reports even if they haven't completed any challenges yet.
+                </p>
+              </div>
             </div>
           </div>
         </div>
