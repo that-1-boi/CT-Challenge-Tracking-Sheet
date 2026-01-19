@@ -49,12 +49,14 @@ Run the `verify.sql` script to confirm everything is set up correctly:
 
 ## Step 3: Configure Environment Variables
 
+### For Local Development
+
 1. In Supabase dashboard, go to **Project Settings** (gear icon) → **API**
 2. Copy your:
    - **Project URL** (looks like: `https://xxxxx.supabase.co`)
    - **anon public** API key (the long string)
 
-3. Create or update `.env` file in your project root:
+3. Create `.env` file in your project root:
 
 ```env
 VITE_SUPABASE_URL=https://your-project-id.supabase.co
@@ -62,6 +64,22 @@ VITE_SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
 **Important:** Add `.env` to your `.gitignore` to keep credentials secure!
+
+### For Vercel Deployment
+
+1. Go to your Vercel project dashboard
+2. Click **Settings** → **Environment Variables**
+3. Add the following variables:
+
+| Name | Value | Environment |
+|------|-------|-------------|
+| `VITE_SUPABASE_URL` | `https://your-project-id.supabase.co` | Production, Preview, Development |
+| `VITE_SUPABASE_ANON_KEY` | Your anon public key | Production, Preview, Development |
+
+4. Click **Save** for each variable
+5. **Redeploy** your application for changes to take effect
+
+**Note:** Vercel automatically exposes environment variables prefixed with `VITE_` to the browser at build time.
 
 ---
 
@@ -87,14 +105,14 @@ SELECT * FROM class_sessions ORDER BY sort_order;
 
 ---
 
-## Step 5: Test the Application
+## Step 5: Test Locally
 
 1. Start your development server:
    ```bash
    npm run dev
    ```
 
-2. Open the application in your browser
+2. Open the application in your browser (usually `http://localhost:5173`)
 
 3. Test the following:
    - ✅ **Admin Panel**: Add a new student to "Unassigned"
@@ -102,6 +120,113 @@ SELECT * FROM class_sessions ORDER BY sort_order;
    - ✅ **Dashboard**: Toggle some challenges for the student
    - ✅ **Refresh**: Close and reopen the browser - data should persist
    - ✅ **Student Directory**: Verify progress shows up
+
+---
+
+## Step 6: Deploy to Vercel
+
+### Initial Deployment
+
+1. **Ensure `.env` is in `.gitignore`**:
+   ```bash
+   # Check if .gitignore contains .env
+   cat .gitignore | grep "^\.env$"
+   # If not found, add it:
+   echo ".env" >> .gitignore
+   ```
+
+2. **Commit and push your code**:
+   ```bash
+   git add .
+   git commit -m "Add Supabase database integration"
+   git push origin main
+   ```
+
+3. **Deploy on Vercel**:
+   - Go to [vercel.com](https://vercel.com) and sign in
+   - Click **Add New** → **Project**
+   - Import your Git repository
+   - **Framework Preset**: Vite (should auto-detect)
+   - Click **Deploy** (will fail without env vars - that's expected)
+
+4. **Add Environment Variables** (CRITICAL):
+   - In Vercel dashboard, go to **Settings** → **Environment Variables**
+   - Add these two variables:
+
+   **Variable 1:**
+   - Name: `VITE_SUPABASE_URL`
+   - Value: `https://your-project-id.supabase.co`
+   - Environments: ✅ Production, ✅ Preview, ✅ Development
+   - Click **Save**
+
+   **Variable 2:**
+   - Name: `VITE_SUPABASE_ANON_KEY`
+   - Value: Your anon public key from Supabase
+   - Environments: ✅ Production, ✅ Preview, ✅ Development
+   - Click **Save**
+
+5. **Redeploy**:
+   - Go to **Deployments** tab
+   - Click **...** on the failed deployment
+   - Click **Redeploy**
+   - Wait for build to complete
+
+6. **Test Production**:
+   - Click **Visit** or go to your Vercel URL
+   - Test adding students and toggling challenges
+   - Verify data persists after refresh
+
+### Subsequent Deployments
+
+Vercel auto-deploys on Git push:
+```bash
+git add .
+git commit -m "Your changes"
+git push origin main
+# Vercel automatically builds and deploys
+```
+
+### Manual Redeploy (if needed)
+
+1. Go to Vercel dashboard → **Deployments**
+2. Click **...** → **Redeploy** on any deployment
+3. Choose **Use existing Build Cache** for faster rebuilds
+
+---
+
+## Step 7: Verify Production Database Connection
+
+### Check Environment Variables
+
+1. In Vercel, go to **Settings** → **Environment Variables**
+2. Verify both variables are present with correct values
+3. Ensure they're enabled for all environments
+
+### Test Database Connection
+
+1. Visit your production URL
+2. Open browser console (F12)
+3. Look for these logs:
+   ```
+   🔄 Loading state from Supabase...
+   ✓ Loaded: X themes, X students, X assignments, X progress records
+   ✅ State loaded in XXXms
+   ```
+
+4. If you see errors like "Failed to fetch" or "Invalid API key":
+   - Double-check environment variables in Vercel
+   - Redeploy after fixing
+   - Clear browser cache
+
+### Test Full Workflow
+
+On your production Vercel URL:
+- [ ] **Add Student**: Admin → Add "Test Student" → Should save
+- [ ] **Assign Class**: Drag to "Sat AM1" → Should save
+- [ ] **Toggle Challenges**: Dashboard → Toggle 3 challenges → Should save
+- [ ] **Refresh Page**: Data should persist
+- [ ] **Open in New Tab**: Should show same data
+- [ ] **Check Supabase**: SQL Editor → `SELECT * FROM students;` → Should see data
 
 ---
 

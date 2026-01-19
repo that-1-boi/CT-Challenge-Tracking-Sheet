@@ -44,6 +44,30 @@ Open [http://localhost:5173](http://localhost:5173)
 
 ---
 
+## 🚀 Deploy to Vercel
+
+### 1-Click Deployment
+```bash
+# Ensure .env is in .gitignore
+echo ".env" >> .gitignore
+
+# Push to Git
+git add .
+git commit -m "Initial deployment"
+git push origin main
+```
+
+### On Vercel Dashboard
+1. Import your Git repository
+2. Add environment variables:
+   - `VITE_SUPABASE_URL` = Your Supabase URL
+   - `VITE_SUPABASE_ANON_KEY` = Your anon public key
+3. Deploy!
+
+**Detailed Guide:** See [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md)
+
+---
+
 ## 📚 Full Documentation
 
 - **[REFACTORING_SUMMARY.md](./REFACTORING_SUMMARY.md)** - Complete overview of changes
