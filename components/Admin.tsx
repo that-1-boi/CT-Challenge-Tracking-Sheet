@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppState, Theme, Student } from '../types';
 import { loadState, saveState } from '../services/storageService';
 import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
@@ -51,16 +51,6 @@ const Admin: React.FC = () => {
 
   const activeTheme = state.themes.find(t => t.name === state.currentWeekTheme) || state.themes[0];
 
-  const globalStudents = useMemo(() => {
-    const map = new Map<string, Student>();
-    state.themes.forEach(t => {
-      t.classes.forEach(c => {
-        c.students.forEach(s => map.set(s.id, s));
-      });
-    });
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [state]);
-
   const updateClassName = (classId: string, newName: string) => {
     setState(prev => ({
       ...prev,
@@ -77,32 +67,38 @@ const Admin: React.FC = () => {
 
     const newStudent: Student = { id: crypto.randomUUID(), name };
 
-    // Add student to unassigned in ALL themes
+    // Add student to the specified class in the CURRENT theme only
     setState(prev => ({
       ...prev,
-      themes: prev.themes.map(t => ({
-        ...t,
-        classes: t.classes.map(c => c.id === 'unassigned'
-          ? { ...c, students: [...c.students, { ...newStudent }] }
-          : c
-        )
-      }))
+      themes: prev.themes.map(t => t.name === prev.currentWeekTheme
+        ? {
+            ...t,
+            classes: t.classes.map(c => c.id === classId
+              ? { ...c, students: [...c.students, { ...newStudent }] }
+              : c
+            )
+          }
+        : t
+      )
     }));
 
     setNewStudentNames(prev => ({ ...prev, [classId]: '' }));
   };
 
   const updateStudentName = (classId: string, studentId: string, newName: string) => {
-    // Update student name across ALL themes and ALL classes
+    // Update student name only in the CURRENT theme
     setState(prev => ({
       ...prev,
-      themes: prev.themes.map(t => ({
-        ...t,
-        classes: t.classes.map(c => ({
-          ...c,
-          students: c.students.map(s => s.id === studentId ? { ...s, name: newName } : s)
-        }))
-      }))
+      themes: prev.themes.map(t => t.name === prev.currentWeekTheme
+        ? {
+            ...t,
+            classes: t.classes.map(c => ({
+              ...c,
+              students: c.students.map(s => s.id === studentId ? { ...s, name: newName } : s)
+            }))
+          }
+        : t
+      )
     }));
   };
 
@@ -228,11 +224,9 @@ const Admin: React.FC = () => {
     const name = newThemeName.trim();
     if (!name || state.themes.find(t => t.name === name)) return;
 
-    // Get all unique students from across all themes
-    const allStudents = globalStudents.map(s => ({ ...s }));
-
+    // Create a new theme with EMPTY classes (no student copying)
+    // Students should be manually assigned to each theme's classes
     const newThemeClasses = JSON.parse(JSON.stringify(DEFAULT_CLASSES)).map((c: any) => {
-      if (c.id === 'unassigned') return { ...c, students: allStudents };
       return { ...c, students: [] };
     });
 

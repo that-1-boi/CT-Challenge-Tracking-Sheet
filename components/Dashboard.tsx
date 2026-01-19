@@ -65,8 +65,24 @@ const Dashboard: React.FC = () => {
   const realClasses = activeTheme?.classes.filter(c => c.id !== 'unassigned') || [];
   const currentClass = realClasses.find(c => c.id === state?.selectedClassId) || realClasses[0];
 
-  // Get progress for a student from history (most recent entry for today)
+  // Get progress for a student from state.progress first, then fall back to history
   const getStudentProgress = (studentName: string, className: string, themeName: string) => {
+    // First try to get from state.progress (primary source)
+    if (state && currentClass) {
+      const student = currentClass.students.find(s => s.name === studentName);
+      if (student) {
+        const progressKey = `${currentClass.id}_${student.id}_${themeName}`;
+        const stateProgress = state.progress[progressKey];
+        if (stateProgress && stateProgress.challengesCompleted) {
+          return {
+            challenges: stateProgress.challengesCompleted,
+            timestamp: stateProgress.timestamp
+          };
+        }
+      }
+    }
+
+    // Fallback to history (for legacy data or if state.progress is empty)
     if (!history || history.length === 0) return { challenges: [], timestamp: 0 };
 
     const today = new Date().toISOString().split('T')[0];
@@ -101,57 +117,56 @@ const Dashboard: React.FC = () => {
   const syncToHistory = (studentName: string, updatedChallengeIds: string[]) => {
     if (!currentClass || !activeTheme || !state) return;
 
-    loadHistory().then(loadedHistory => {
-      const now = new Date();
-      const todayStr = now.toISOString().split('T')[0];
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
 
-      // Convert challenge IDs to names
-      const challengeNames = updatedChallengeIds.map(cid => {
-        const idx = parseInt(cid.substring(1)) - 1;
-        return activeTheme.challenges[idx] || cid;
-      });
+    // Convert challenge IDs to names
+    const challengeNames = updatedChallengeIds.map(cid => {
+      const idx = parseInt(cid.substring(1)) - 1;
+      return activeTheme.challenges[idx] || cid;
+    });
 
-      const existingEntryIdx = loadedHistory.findIndex(h =>
-        h.studentName === studentName &&
-        h.className === currentClass.name &&
-        h.weekTheme === state.currentWeekTheme &&
-        h.date.startsWith(todayStr)
-      );
+    // Find existing entry for today in local state
+    const existingEntryIdx = history.findIndex(h =>
+      h.studentName === studentName &&
+      h.className === currentClass.name &&
+      h.weekTheme === state.currentWeekTheme &&
+      h.date.startsWith(todayStr)
+    );
 
-      let newHistory = [...loadedHistory];
+    let updatedHistory = [...history];
 
-      if (existingEntryIdx !== -1) {
-        // Update existing entry
-        newHistory[existingEntryIdx] = {
-          ...newHistory[existingEntryIdx],
-          challenges: challengeNames,
-          allAvailableChallenges: activeTheme.challenges,
-          date: now.toISOString()
-        };
-      } else {
-        // Create new entry
-        const newEntry: HistoryEntry = {
-          id: crypto.randomUUID(),
-          studentName: studentName,
-          className: currentClass.name,
-          weekName: `Session ${now.toLocaleDateString()}`,
-          weekTheme: state.currentWeekTheme,
-          challenges: challengeNames,
-          allAvailableChallenges: activeTheme.challenges,
-          date: now.toISOString()
-        };
-        newHistory.push(newEntry);
-      }
+    if (existingEntryIdx !== -1) {
+      // Update existing entry
+      updatedHistory[existingEntryIdx] = {
+        ...updatedHistory[existingEntryIdx],
+        challenges: challengeNames,
+        allAvailableChallenges: activeTheme.challenges,
+        date: now.toISOString()
+      };
+      console.log('Dashboard: Updated existing history entry for', studentName);
+    } else {
+      // Create new entry only if it doesn't exist
+      const newEntry: HistoryEntry = {
+        id: crypto.randomUUID(),
+        studentName: studentName,
+        className: currentClass.name,
+        weekName: `Session ${now.toLocaleDateString()}`,
+        weekTheme: state.currentWeekTheme,
+        challenges: challengeNames,
+        allAvailableChallenges: activeTheme.challenges,
+        date: now.toISOString()
+      };
+      updatedHistory.push(newEntry);
+      console.log('Dashboard: Created new history entry for', studentName);
+    }
 
-      saveHistory(newHistory).then(() => {
-        console.log('Dashboard: History saved, reloading...');
-        // Reload history to update the UI
-        loadHistory().then(refreshedHistory => {
-          setHistory(refreshedHistory);
-        });
-      });
-    }).catch(error => {
-      console.error('Dashboard: Error syncing to history:', error);
+    // Update local state immediately for UI responsiveness
+    setHistory(updatedHistory);
+
+    // Save to database
+    saveHistory(updatedHistory).catch(error => {
+      console.error('Dashboard: Error saving history:', error);
     });
   };
 
@@ -159,6 +174,8 @@ const Dashboard: React.FC = () => {
     if (!currentClass || !state || !activeTheme) return;
 
     const challengeId = `c${challengeIdx + 1}`;
+    const student = currentClass.students.find(s => s.name === studentName);
+    if (!student) return;
 
     // Get current progress from history
     const currentProgress = getStudentProgress(studentName, currentClass.name, state.currentWeekTheme);
@@ -175,6 +192,25 @@ const Dashboard: React.FC = () => {
       newChallenges: updatedChallenges
     });
 
+    // Update state.progress for proper database sync
+    const progressKey = `${currentClass.id}_${student.id}_${state.currentWeekTheme}`;
+    setState(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        progress: {
+          ...prev.progress,
+          [progressKey]: {
+            studentId: student.id,
+            studentName: studentName,
+            challengesCompleted: updatedChallenges,
+            timestamp: Date.now(),
+          }
+        }
+      };
+    });
+
+    // Also sync to history for backward compatibility
     syncToHistory(studentName, updatedChallenges);
   };
 

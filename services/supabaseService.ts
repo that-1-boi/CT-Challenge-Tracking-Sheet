@@ -74,6 +74,8 @@ async function setAppSetting(key: string, value: string): Promise<void> {
 // Convert database rows to AppState
 async function supabaseToAppState(): Promise<AppState> {
   try {
+    console.log('🔄 Loading state from Supabase...');
+
     // Fetch all themes
     const { data: themesData, error: themesError } = await supabase
       .from('themes')
@@ -81,12 +83,13 @@ async function supabaseToAppState(): Promise<AppState> {
       .order('created_at', { ascending: true });
 
     if (themesError) {
-      console.error('Error fetching themes:', themesError);
+      console.error('✗ Error fetching themes:', themesError);
       return getDefaultAppState();
     }
 
     // If no themes exist, return default state
     if (!themesData || themesData.length === 0) {
+      console.log('ℹ No themes found in database, using default state');
       return getDefaultAppState();
     }
 
@@ -147,49 +150,59 @@ async function supabaseToAppState(): Promise<AppState> {
           };
         });
 
-      // If no class sessions exist in DB, check if students exist for this theme and create classes for them
-      if (themeClasses.length === 0 && studentsData && studentsData.length > 0) {
-        const themeStudents = (studentsData || [])
+      // If no class sessions exist in DB for this theme, we need to ensure all DEFAULT_CLASSES are created
+      // This handles the case where a theme exists but no class_sessions were saved yet
+      if (themeClasses.length === 0) {
+        console.log(`No class sessions found for theme ${themeRow.name}. Creating default class structure.`);
+
+        // Check if there are any students for this theme without class sessions
+        const orphanedStudents = (studentsData || [])
           .filter((s: StudentRow) => s.theme_id === themeRow.id);
 
-        if (themeStudents.length > 0) {
-          console.log(`Found ${themeStudents.length} students for theme ${themeRow.name} but no class sessions. Creating default classes.`);
+        if (orphanedStudents.length > 0) {
+          console.log(`Found ${orphanedStudents.length} students for theme ${themeRow.name}. Grouping by class_session_id.`);
           // Group students by class_session_id
           const studentsByClass = new Map<string, StudentRow[]>();
-          themeStudents.forEach(s => {
+          orphanedStudents.forEach(s => {
             if (!studentsByClass.has(s.class_session_id)) {
               studentsByClass.set(s.class_session_id, []);
             }
             studentsByClass.get(s.class_session_id)!.push(s);
           });
 
-          // Create class entries for each class_session_id
-          studentsByClass.forEach((students, classSessionId) => {
-            const defaultClass = DEFAULT_CLASSES.find(c => c.id === classSessionId);
+          // Create class entries matching DEFAULT_CLASSES order
+          DEFAULT_CLASSES.forEach(defaultClass => {
+            const studentsInClass = studentsByClass.get(defaultClass.id) || [];
             themeClasses.push({
-              id: classSessionId,
-              name: defaultClass?.name || classSessionId,
-              students: students.map(s => ({ id: s.id, name: s.name })),
+              id: defaultClass.id,
+              name: defaultClass.name,
+              students: studentsInClass.map(s => ({ id: s.id, name: s.name })),
             });
           });
+        } else {
+          // No students exist, just create empty default classes
+          themeClasses.push(...DEFAULT_CLASSES.map(c => ({ ...c, students: [] })));
         }
+      } else {
+        // Class sessions exist, but ensure all DEFAULT_CLASSES are present
+        const themeClassIds = new Set(themeClasses.map(c => c.id));
+        const missingClasses = DEFAULT_CLASSES.filter(dc => !themeClassIds.has(dc.id));
+
+        if (missingClasses.length > 0) {
+          console.log(`Adding ${missingClasses.length} missing classes to theme ${themeRow.name}`);
+          themeClasses.push(...missingClasses.map(c => ({ ...c, students: [] })));
+        }
+
+        // Sort classes to match DEFAULT_CLASSES order
+        const classOrderMap = new Map(DEFAULT_CLASSES.map((c, idx) => [c.id, idx]));
+        themeClasses.sort((a, b) => {
+          const orderA = classOrderMap.get(a.id) ?? 999;
+          const orderB = classOrderMap.get(b.id) ?? 999;
+          return orderA - orderB;
+        });
       }
 
-      // Ensure all default classes exist and sort by DEFAULT_CLASSES order
-      const themeClassIds = new Set(themeClasses.map(c => c.id));
-      const missingClasses = DEFAULT_CLASSES.filter(dc => !themeClassIds.has(dc.id));
-      const allClassesWithMissing = [
-        ...themeClasses,
-        ...missingClasses.map(c => ({ ...c, students: [] })),
-      ];
-
-      // Sort classes to match DEFAULT_CLASSES order
-      const classOrderMap = new Map(DEFAULT_CLASSES.map((c, idx) => [c.id, idx]));
-      const allClasses = allClassesWithMissing.sort((a, b) => {
-        const orderA = classOrderMap.get(a.id) ?? 999;
-        const orderB = classOrderMap.get(b.id) ?? 999;
-        return orderA - orderB;
-      });
+      const allClasses = themeClasses;
 
       console.log(`Theme ${themeRow.name} has ${allClasses.length} classes, ${allClasses.reduce((sum, c) => sum + c.students.length, 0)} total students`);
 
@@ -201,7 +214,7 @@ async function supabaseToAppState(): Promise<AppState> {
       };
     });
 
-    // Build progress object
+    // Build progress object with robust key format
     const progress: Record<string, StudentProgress> = {};
     if (progressData) {
       console.log(`Loading ${progressData.length} progress entries from database`);
@@ -209,24 +222,31 @@ async function supabaseToAppState(): Promise<AppState> {
         // Find the student to get their name
         const student = (studentsData || []).find((s: StudentRow) => s.id === progRow.student_id);
         if (student) {
-          // Build key: class_session_id_student_id_theme_name
-          // Theme name might contain underscores, so we use the full theme_name from DB
+          // Build key: classId_studentId_themeName
+          // Using underscore as delimiter since IDs don't contain underscores
           const key = `${progRow.class_session_id}_${progRow.student_id}_${progRow.theme_name}`;
+
+          // Validate data before storing
+          const challengesCompleted = Array.isArray(progRow.challenges_completed)
+            ? progRow.challenges_completed
+            : [];
+
           progress[key] = {
             studentId: progRow.student_id,
             studentName: student.name,
-            challengesCompleted: Array.isArray(progRow.challenges_completed) ? progRow.challenges_completed : [],
+            challengesCompleted: challengesCompleted,
             timestamp: new Date(progRow.timestamp).getTime(),
           };
-          console.log(`Loaded progress for ${key}: ${progRow.challenges_completed?.length || 0} challenges completed`);
+
+          console.log(`✓ Loaded progress for ${student.name} in ${progRow.class_session_id}: ${challengesCompleted.length}/5 challenges`);
         } else {
-          console.warn(`Student ${progRow.student_id} not found for progress entry (class: ${progRow.class_session_id}, theme: ${progRow.theme_name})`);
+          console.warn(`⚠ Student ${progRow.student_id} not found for progress entry (class: ${progRow.class_session_id}, theme: ${progRow.theme_name})`);
         }
       }
     } else {
       console.log('No progress data found in database');
     }
-    console.log(`Total progress keys loaded: ${Object.keys(progress).length}`);
+    console.log(`✅ Total progress entries loaded: ${Object.keys(progress).length}`);
 
     // Get app settings
     const currentWeekTheme = (await getAppSetting('currentWeekTheme')) || themes[0]?.name || DEFAULT_THEMES[0].name;
@@ -250,6 +270,9 @@ async function supabaseToAppState(): Promise<AppState> {
 
 // Convert AppState to database operations
 async function appStateToSupabase(state: AppState): Promise<void> {
+  console.log('💾 Saving state to Supabase...');
+  const startTime = Date.now();
+
   try {
     // Collect all students across all themes with their assignments
     const studentAssignments = new Map<string, { name: string; assignments: Array<{ themeId: string; themeName: string; classId: string }> }>();
@@ -418,36 +441,60 @@ async function appStateToSupabase(state: AppState): Promise<void> {
       }
     }
 
-    // 4. Upsert student progress
-    console.log(`Saving ${Object.keys(state.progress).length} progress entries`);
-    for (const [key, progress] of Object.entries(state.progress)) {
-      const parts = key.split('_');
-      if (parts.length < 3) {
-        console.warn(`Invalid progress key format: ${key}, expected format: classId_studentId_themeName`);
-        continue;
-      }
+    // 4. Upsert student progress with improved error handling
+    const progressEntries = Object.entries(state.progress);
+    console.log(`Saving ${progressEntries.length} progress entries to database`);
 
-      const classSessionId = parts[0];
-      const studentId = parts[1];
-      const themeName = parts.slice(2).join('_');
+    let successCount = 0;
+    let errorCount = 0;
 
-      const { error: progressError } = await supabase
-        .from('student_progress')
-        .upsert(
-          {
-            student_id: studentId,
-            class_session_id: classSessionId,
-            theme_name: themeName,
-            challenges_completed: progress.challengesCompleted || [],
-            timestamp: new Date(progress.timestamp).toISOString(),
-          },
-          { onConflict: 'student_id,class_session_id,theme_name' }
-        );
+    for (const [key, progress] of progressEntries) {
+      try {
+        // Parse the key: classId_studentId_themeName
+        const parts = key.split('_');
+        if (parts.length < 3) {
+          console.warn(`⚠ Skipping invalid progress key: "${key}" (expected format: classId_studentId_themeName)`);
+          errorCount++;
+          continue;
+        }
 
-      if (progressError) {
-        console.error(`Error upserting progress for ${key}:`, progressError);
+        const classSessionId = parts[0];
+        const studentId = parts[1];
+        const themeName = parts.slice(2).join('_'); // Rejoin in case theme name has underscores
+
+        // Validate data
+        if (!progress.challengesCompleted || !Array.isArray(progress.challengesCompleted)) {
+          console.warn(`⚠ Skipping invalid progress data for key "${key}": challengesCompleted is not an array`);
+          errorCount++;
+          continue;
+        }
+
+        const { error: progressError } = await supabase
+          .from('student_progress')
+          .upsert(
+            {
+              student_id: studentId,
+              class_session_id: classSessionId,
+              theme_name: themeName,
+              challenges_completed: progress.challengesCompleted,
+              timestamp: new Date(progress.timestamp || Date.now()).toISOString(),
+            },
+            { onConflict: 'student_id,class_session_id,theme_name' }
+          );
+
+        if (progressError) {
+          console.error(`✗ Error upserting progress for "${progress.studentName}" (${key}):`, progressError.message);
+          errorCount++;
+        } else {
+          successCount++;
+        }
+      } catch (error) {
+        console.error(`✗ Exception while saving progress for key "${key}":`, error);
+        errorCount++;
       }
     }
+
+    console.log(`✅ Progress save complete: ${successCount} successful, ${errorCount} errors`);
 
     // 5. Save app settings
     await setAppSetting('currentWeekTheme', state.currentWeekTheme);
@@ -455,9 +502,10 @@ async function appStateToSupabase(state: AppState): Promise<void> {
     await setAppSetting('publicClassId', state.publicClassId);
     await setAppSetting('selectedClassId', state.selectedClassId);
 
-    console.log('✅ Successfully saved all state to Supabase');
+    const elapsed = Date.now() - startTime;
+    console.log(`✅ Successfully saved all state to Supabase in ${elapsed}ms`);
   } catch (error) {
-    console.error('Error saving AppState to Supabase:', error);
+    console.error('✗ Error saving AppState to Supabase:', error);
     throw error;
   }
 }
@@ -515,6 +563,7 @@ export const loadHistory = async (): Promise<HistoryEntry[]> => {
 export const saveHistory = async (history: HistoryEntry[]): Promise<void> => {
   try {
     if (history.length === 0) {
+      // Clear all history entries if passed empty array
       const { data: allEntries } = await supabase
         .from('history_entries')
         .select('id')
@@ -533,23 +582,9 @@ export const saveHistory = async (history: HistoryEntry[]): Promise<void> => {
       return;
     }
 
-    const { data: allEntries } = await supabase
-      .from('history_entries')
-      .select('id')
-      .limit(10000);
-
-    if (allEntries && allEntries.length > 0) {
-      const idsToDelete = allEntries.map(e => e.id);
-      for (let i = 0; i < idsToDelete.length; i += 1000) {
-        const batch = idsToDelete.slice(i, i + 1000);
-        await supabase
-          .from('history_entries')
-          .delete()
-          .in('id', batch);
-      }
-    }
-
+    // Use proper upsert with IDs to avoid duplicates
     const rows = history.map(entry => ({
+      id: entry.id, // Preserve the UUID
       student_name: entry.studentName,
       class_name: entry.className,
       week_name: entry.weekName,
@@ -559,17 +594,21 @@ export const saveHistory = async (history: HistoryEntry[]): Promise<void> => {
       date: entry.date,
     }));
 
+    // Batch upsert to avoid conflicts
     for (let i = 0; i < rows.length; i += 1000) {
       const batch = rows.slice(i, i + 1000);
-      const { error: insertError } = await supabase
+      const { error: upsertError } = await supabase
         .from('history_entries')
-        .insert(batch);
+        .upsert(batch, { onConflict: 'id' });
 
-      if (insertError) {
-        console.error('Error saving history batch:', insertError);
+      if (upsertError) {
+        console.error('Error upserting history batch:', upsertError);
       }
     }
+
+    console.log(`✅ Successfully upserted ${history.length} history entries`);
   } catch (error) {
     console.error('Error saving history:', error);
+    throw error;
   }
 };
