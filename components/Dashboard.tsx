@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, HistoryEntry } from '../types';
-import { loadState, saveState, loadHistory, saveHistory } from '../services/storageService';
+import { loadState, saveState, loadHistory } from '../services/storageService';
 
 const Dashboard: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
@@ -114,62 +114,6 @@ const Dashboard: React.FC = () => {
     };
   };
 
-  const syncToHistory = (studentName: string, updatedChallengeIds: string[]) => {
-    if (!currentClass || !activeTheme || !state) return;
-
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-
-    // Convert challenge IDs to names
-    const challengeNames = updatedChallengeIds.map(cid => {
-      const idx = parseInt(cid.substring(1)) - 1;
-      return activeTheme.challenges[idx] || cid;
-    });
-
-    // Find existing entry for today in local state
-    const existingEntryIdx = history.findIndex(h =>
-      h.studentName === studentName &&
-      h.className === currentClass.name &&
-      h.weekTheme === state.currentWeekTheme &&
-      h.date.startsWith(todayStr)
-    );
-
-    let updatedHistory = [...history];
-
-    if (existingEntryIdx !== -1) {
-      // Update existing entry
-      updatedHistory[existingEntryIdx] = {
-        ...updatedHistory[existingEntryIdx],
-        challenges: challengeNames,
-        allAvailableChallenges: activeTheme.challenges,
-        date: now.toISOString()
-      };
-      console.log('Dashboard: Updated existing history entry for', studentName);
-    } else {
-      // Create new entry only if it doesn't exist
-      const newEntry: HistoryEntry = {
-        id: crypto.randomUUID(),
-        studentName: studentName,
-        className: currentClass.name,
-        weekName: `Session ${now.toLocaleDateString()}`,
-        weekTheme: state.currentWeekTheme,
-        challenges: challengeNames,
-        allAvailableChallenges: activeTheme.challenges,
-        date: now.toISOString()
-      };
-      updatedHistory.push(newEntry);
-      console.log('Dashboard: Created new history entry for', studentName);
-    }
-
-    // Update local state immediately for UI responsiveness
-    setHistory(updatedHistory);
-
-    // Save to database
-    saveHistory(updatedHistory).catch(error => {
-      console.error('Dashboard: Error saving history:', error);
-    });
-  };
-
   const toggleChallenge = (studentName: string, challengeIdx: number) => {
     if (!currentClass || !state || !activeTheme) return;
 
@@ -177,7 +121,7 @@ const Dashboard: React.FC = () => {
     const student = currentClass.students.find(s => s.name === studentName);
     if (!student) return;
 
-    // Get current progress from history
+    // Get current progress from state
     const currentProgress = getStudentProgress(studentName, currentClass.name, state.currentWeekTheme);
     const isCompleted = currentProgress.challenges.includes(challengeId);
 
@@ -192,7 +136,7 @@ const Dashboard: React.FC = () => {
       newChallenges: updatedChallenges
     });
 
-    // Update state.progress for proper database sync
+    // Update state.progress - this will auto-save to database
     const progressKey = `${currentClass.id}_${student.id}_${state.currentWeekTheme}`;
     setState(prev => {
       if (!prev) return prev;
@@ -210,8 +154,14 @@ const Dashboard: React.FC = () => {
       };
     });
 
-    // Also sync to history for backward compatibility
-    syncToHistory(studentName, updatedChallenges);
+    // Refresh history after a short delay to show updated progress
+    setTimeout(() => {
+      loadHistory().then(refreshedHistory => {
+        setHistory(refreshedHistory);
+      }).catch(error => {
+        console.error('Dashboard: Error refreshing history:', error);
+      });
+    }, 1000);
   };
 
   if (loading) {
