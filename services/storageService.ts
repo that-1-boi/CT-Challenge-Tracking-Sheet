@@ -1,1 +1,1 @@
-export { loadState, saveState, loadHistory, saveHistory } from './supabaseService';
+export { loadState, saveState, loadHistory, saveHistory, getAllStudentsFromDB } from './supabaseService';

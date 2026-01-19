@@ -527,6 +527,32 @@ export const saveHistory = async (_history: HistoryEntry[]): Promise<void> => {
 };
 
 // =============================================================================
+// GET ALL STUDENTS FROM DATABASE
+// =============================================================================
+
+export const getAllStudentsFromDB = async (): Promise<Student[]> => {
+  try {
+    const { data: studentsData, error } = await supabase
+      .from('students')
+      .select('id, name')
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('✗ Error loading all students:', error);
+      return [];
+    }
+
+    return (studentsData || []).map((s: StudentRow) => ({
+      id: s.id,
+      name: s.name,
+    }));
+  } catch (error) {
+    console.error('✗ Error loading all students:', error);
+    return [];
+  }
+};
+
+// =============================================================================
 // DEFAULT STATE
 // =============================================================================
 

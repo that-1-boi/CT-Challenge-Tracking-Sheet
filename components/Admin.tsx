@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, Theme, Student } from '../types';
-import { loadState, saveState } from '../services/storageService';
+import { loadState, saveState, getAllStudentsFromDB } from '../services/storageService';
 import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
 
 const Admin: React.FC = () => {
@@ -224,27 +224,12 @@ const Admin: React.FC = () => {
     setState(prev => ({ ...prev, publicThemeName: themeName }));
   };
 
-  // Get all unique students across all themes
-  const getAllStudents = (): Student[] => {
-    const studentMap = new Map<string, Student>();
-    state.themes.forEach(theme => {
-      theme.classes.forEach(cls => {
-        cls.students.forEach(student => {
-          if (!studentMap.has(student.id)) {
-            studentMap.set(student.id, student);
-          }
-        });
-      });
-    });
-    return Array.from(studentMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  };
-
-  const createNewTheme = () => {
+  const createNewTheme = async () => {
     const name = newThemeName.trim();
     if (!name || state.themes.find(t => t.name === name)) return;
 
-    // Get all existing students and put them in "unassigned" for the new theme
-    const allStudents = getAllStudents();
+    // Get ALL students from database (not just from current state)
+    const allStudents = await getAllStudentsFromDB();
 
     const newThemeClasses = JSON.parse(JSON.stringify(DEFAULT_CLASSES)).map((c: any) => {
       // Put all students in "unassigned", empty for other classes
