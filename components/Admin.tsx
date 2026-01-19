@@ -25,6 +25,10 @@ const Admin: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeUploadIdx, setActiveUploadIdx] = useState<number | null>(null);
 
+  // Bulk assignment state
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+  const [bulkAssignMode, setBulkAssignMode] = useState(false);
+
   useEffect(() => {
     // Load state on mount
     loadState().then(loadedState => {
@@ -220,13 +224,33 @@ const Admin: React.FC = () => {
     setState(prev => ({ ...prev, publicThemeName: themeName }));
   };
 
+  // Get all unique students across all themes
+  const getAllStudents = (): Student[] => {
+    const studentMap = new Map<string, Student>();
+    state.themes.forEach(theme => {
+      theme.classes.forEach(cls => {
+        cls.students.forEach(student => {
+          if (!studentMap.has(student.id)) {
+            studentMap.set(student.id, student);
+          }
+        });
+      });
+    });
+    return Array.from(studentMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  };
+
   const createNewTheme = () => {
     const name = newThemeName.trim();
     if (!name || state.themes.find(t => t.name === name)) return;
 
-    // Create a new theme with EMPTY classes (no student copying)
-    // Students should be manually assigned to each theme's classes
+    // Get all existing students and put them in "unassigned" for the new theme
+    const allStudents = getAllStudents();
+
     const newThemeClasses = JSON.parse(JSON.stringify(DEFAULT_CLASSES)).map((c: any) => {
+      // Put all students in "unassigned", empty for other classes
+      if (c.id === 'unassigned') {
+        return { ...c, students: allStudents.map(s => ({ ...s })) };
+      }
       return { ...c, students: [] };
     });
 
@@ -243,6 +267,64 @@ const Admin: React.FC = () => {
       currentWeekTheme: name
     }));
     setNewThemeName('');
+  };
+
+  // Toggle student selection for bulk operations
+  const toggleStudentSelection = (studentId: string) => {
+    setSelectedStudents(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(studentId)) {
+        newSet.delete(studentId);
+      } else {
+        newSet.add(studentId);
+      }
+      return newSet;
+    });
+  };
+
+  // Bulk assign selected students to a class
+  const bulkAssignToClass = (targetClassId: string) => {
+    if (selectedStudents.size === 0) return;
+
+    setState(prev => {
+      const currentTheme = prev.themes.find(t => t.name === prev.currentWeekTheme);
+      if (!currentTheme) return prev;
+
+      // Collect all selected students from all classes
+      const studentsToMove: Student[] = [];
+      currentTheme.classes.forEach(cls => {
+        cls.students.forEach(student => {
+          if (selectedStudents.has(student.id)) {
+            studentsToMove.push(student);
+          }
+        });
+      });
+
+      return {
+        ...prev,
+        themes: prev.themes.map(t => t.name === prev.currentWeekTheme
+          ? {
+              ...t,
+              classes: t.classes.map(c => {
+                // Remove selected students from all classes
+                const filteredStudents = c.students.filter(s => !selectedStudents.has(s.id));
+
+                // Add all selected students to target class
+                if (c.id === targetClassId) {
+                  return { ...c, students: [...filteredStudents, ...studentsToMove] };
+                }
+
+                return { ...c, students: filteredStudents };
+              })
+            }
+          : t
+        )
+      };
+    });
+
+    // Clear selection after moving
+    setSelectedStudents(new Set());
+    setBulkAssignMode(false);
   };
 
   const handleDragStart = (e: React.DragEvent, studentId: string, sourceClassId: string) => {
@@ -341,7 +423,55 @@ const Admin: React.FC = () => {
                 <span className="w-10 h-10 bg-[#f4c514] flex items-center justify-center rounded-sm"><i className="fas fa-users text-black"></i></span>
                 Class: {state.currentWeekTheme}
               </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkAssignMode(!bulkAssignMode);
+                  if (bulkAssignMode) {
+                    setSelectedStudents(new Set());
+                  }
+                }}
+                className={`px-4 py-2 rounded-sm text-xs font-black uppercase transition-all ${
+                  bulkAssignMode
+                    ? 'bg-[#f4c514] text-black hover:bg-black hover:text-[#f4c514]'
+                    : 'bg-black text-[#f4c514] hover:bg-gray-800'
+                }`}
+              >
+                <i className={`fas ${bulkAssignMode ? 'fa-times' : 'fa-check-square'} mr-2`}></i>
+                {bulkAssignMode ? 'Cancel Bulk Assign' : 'Bulk Assign'}
+              </button>
             </div>
+
+            {bulkAssignMode && selectedStudents.size > 0 && (
+              <div className="bg-[#f4c514] border-2 border-black p-4 rounded-sm shadow-lg">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <i className="fas fa-check-square text-black text-xl"></i>
+                    <span className="text-black font-black uppercase text-sm">
+                      {selectedStudents.size} Student{selectedStudents.size !== 1 ? 's' : ''} Selected
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-black text-black uppercase">Assign to:</label>
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          bulkAssignToClass(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      defaultValue=""
+                      className="bg-white border-2 border-black text-black font-black uppercase px-3 py-2 text-xs focus:outline-none hover:bg-gray-50 cursor-pointer"
+                    >
+                      <option value="" disabled>Select Class Session</option>
+                      {activeTheme?.classes.filter(c => c.id !== 'unassigned').map(cls => (
+                        <option key={cls.id} value={cls.id}>{cls.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-6">
               {activeTheme?.classes.map((cls) => (
@@ -357,35 +487,79 @@ const Admin: React.FC = () => {
                   <div className={`px-4 py-2 flex items-center justify-between border-b ${cls.id === 'unassigned' ? 'bg-slate-200 border-slate-300' : 'bg-[#f4c514] border-black/20'
                     }`}>
                     <span className="text-black font-extrabold text-lg uppercase py-1">{cls.name}</span>
+                    {bulkAssignMode && cls.students.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          cls.students.forEach(s => {
+                            if (!selectedStudents.has(s.id)) {
+                              toggleStudentSelection(s.id);
+                            }
+                          });
+                        }}
+                        className="text-xs font-black uppercase text-black/60 hover:text-black transition-colors"
+                      >
+                        <i className="fas fa-check-double mr-1"></i>
+                        Select All
+                      </button>
+                    )}
                   </div>
 
                   <div className="p-4 space-y-3 min-h-[60px]">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {cls.students.map((student) => (
-                        <div
-                          key={student.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, student.id, cls.id)}
-                          className="flex items-center justify-between bg-white/50 p-2 rounded border border-black/5 text-sm group transition-all hover:bg-white cursor-grab active:cursor-grabbing hover:border-[#f4c514]"
-                        >
-                          <div className="flex items-center gap-2 flex-1 pointer-events-none">
-                            <i className="fas fa-grip-vertical text-black/10 group-hover:text-[#f4c514]/30"></i>
-                            {editingStudentId === student.id ? (
-                              <input
-                                autoFocus
-                                type="text"
-                                className="bg-transparent border-none outline-none font-semibold text-black w-full capitalize pointer-events-auto"
-                                value={student.name}
-                                onBlur={() => setEditingStudentId(null)}
-                                onKeyDown={(e) => e.key === 'Enter' && setEditingStudentId(null)}
-                                onChange={(e) => updateStudentName(cls.id, student.id, e.target.value)}
-                              />
-                            ) : (
-                              <span className="font-semibold text-black cursor-text w-full pointer-events-auto capitalize" onClick={() => setEditingStudentId(student.id)}>{student.name}</span>
+                      {cls.students.map((student) => {
+                        const isSelected = selectedStudents.has(student.id);
+                        return (
+                          <div
+                            key={student.id}
+                            draggable={!bulkAssignMode}
+                            onDragStart={(e) => !bulkAssignMode && handleDragStart(e, student.id, cls.id)}
+                            className={`flex items-center justify-between bg-white/50 p-2 rounded border text-sm group transition-all hover:bg-white ${
+                              bulkAssignMode
+                                ? `cursor-pointer ${isSelected ? 'border-[#f4c514] border-2 bg-[#fff1d1]' : 'border-black/5 hover:border-[#f4c514]/50'}`
+                                : 'cursor-grab active:cursor-grabbing border-black/5 hover:border-[#f4c514]'
+                            }`}
+                            onClick={() => bulkAssignMode && toggleStudentSelection(student.id)}
+                          >
+                            {bulkAssignMode && (
+                              <div className="flex items-center justify-center w-5 h-5 mr-2 pointer-events-none">
+                                <div className={`w-4 h-4 border-2 rounded flex items-center justify-center transition-all ${
+                                  isSelected ? 'bg-[#f4c514] border-black' : 'border-black/20 bg-white'
+                                }`}>
+                                  {isSelected && <i className="fas fa-check text-black text-[10px]"></i>}
+                                </div>
+                              </div>
                             )}
+                            <div className="flex items-center gap-2 flex-1 pointer-events-none">
+                              {!bulkAssignMode && <i className="fas fa-grip-vertical text-black/10 group-hover:text-[#f4c514]/30"></i>}
+                              {editingStudentId === student.id ? (
+                                <input
+                                  autoFocus
+                                  type="text"
+                                  className="bg-transparent border-none outline-none font-semibold text-black w-full capitalize pointer-events-auto"
+                                  value={student.name}
+                                  onBlur={() => setEditingStudentId(null)}
+                                  onKeyDown={(e) => e.key === 'Enter' && setEditingStudentId(null)}
+                                  onChange={(e) => updateStudentName(cls.id, student.id, e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <span
+                                  className="font-semibold text-black cursor-text w-full pointer-events-auto capitalize"
+                                  onClick={(e) => {
+                                    if (!bulkAssignMode) {
+                                      e.stopPropagation();
+                                      setEditingStudentId(student.id);
+                                    }
+                                  }}
+                                >
+                                  {student.name}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     {cls.id === 'unassigned' && (
@@ -502,7 +676,7 @@ const Admin: React.FC = () => {
               <p className="text-white font-black uppercase text-xs italic tracking-widest">Roster Instructions</p>
               <p className="text-gray-400 text-[10px] mt-2 leading-relaxed">
                 1. Add all students to the <b>Unassigned</b> pool first.<br />
-                2. Drag and drop students into their specific session times.<br />
+                2. Drag and drop students individually OR use <b>Bulk Assign</b> to move multiple students at once.<br />
                 3. Click the <b>Image</b> icon OR focus the name field and <b>Ctrl+V</b> to paste an image for each challenge.
               </p>
             </div>
