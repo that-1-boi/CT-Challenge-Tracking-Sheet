@@ -29,10 +29,14 @@ const Admin: React.FC = () => {
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [bulkAssignMode, setBulkAssignMode] = useState(false);
 
+  // Track total students in database for verification
+  const [totalStudentsInDB, setTotalStudentsInDB] = useState<number>(0);
+
   useEffect(() => {
-    // Load state on mount
-    loadState().then(loadedState => {
+    // Load state on mount and get total student count from database
+    Promise.all([loadState(), getAllStudentsFromDB()]).then(([loadedState, allStudents]) => {
       setState(loadedState);
+      setTotalStudentsInDB(allStudents.length);
       setIsLoading(false);
       setSaveStatus('All changes saved');
     });
@@ -87,6 +91,9 @@ const Admin: React.FC = () => {
     }));
 
     setNewStudentNames(prev => ({ ...prev, [classId]: '' }));
+
+    // Update total student count
+    setTotalStudentsInDB(prev => prev + 1);
   };
 
   const updateStudentName = (classId: string, studentId: string, newName: string) => {
@@ -277,6 +284,9 @@ const Admin: React.FC = () => {
           Object.entries(prev.progress).filter(([key]) => !key.includes(studentId))
         )
       }));
+
+      // Update total student count
+      setTotalStudentsInDB(prev => prev - 1);
 
       alert(`${studentName} has been deleted successfully.`);
     } catch (error) {
@@ -494,6 +504,104 @@ const Admin: React.FC = () => {
               </button>
             </div>
 
+            {/* Student Count Verification Panel */}
+            {(() => {
+              const studentsInTheme = activeTheme?.classes.reduce((sum: number, cls) => sum + cls.students.length, 0) || 0;
+              const assignedStudents = activeTheme?.classes
+                .filter(c => c.id !== 'unassigned')
+                .reduce((sum: number, cls) => sum + cls.students.length, 0) || 0;
+              const unassignedStudents = activeTheme?.classes.find(c => c.id === 'unassigned')?.students.length || 0;
+
+              // Check if all students from DB are in this theme
+              const isComplete = studentsInTheme === totalStudentsInDB;
+              const isMissing = studentsInTheme < totalStudentsInDB;
+
+              return (
+                <div className="bg-white border-2 border-black/10 rounded-sm p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase text-black tracking-widest">
+                      <i className="fas fa-chart-pie mr-2 text-[#f4c514]"></i>
+                      Student Distribution
+                    </h3>
+                    {totalStudentsInDB > 0 && (
+                      <div className={`text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded ${
+                        isComplete
+                          ? 'bg-green-100 text-green-700'
+                          : isMissing
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {isComplete ? (
+                          <><i className="fas fa-check-circle mr-1"></i>VERIFIED</>
+                        ) : isMissing ? (
+                          <><i className="fas fa-exclamation-triangle mr-1"></i>MISSING {totalStudentsInDB - studentsInTheme}</>
+                        ) : (
+                          <><i className="fas fa-info-circle mr-1"></i>DUPLICATE</>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="text-center p-3 bg-slate-50 rounded-sm border border-slate-200">
+                      <div className="text-2xl font-black text-black">{assignedStudents}</div>
+                      <div className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Assigned</div>
+                    </div>
+                    <div className="text-center p-3 bg-amber-50 rounded-sm border border-amber-200">
+                      <div className="text-2xl font-black text-amber-700">{unassignedStudents}</div>
+                      <div className="text-[9px] font-black uppercase text-amber-600 tracking-wider">Unassigned</div>
+                    </div>
+                    <div className="text-center p-3 bg-[#fff1d1] rounded-sm border border-[#f4c514]">
+                      <div className="text-2xl font-black text-black">{studentsInTheme}</div>
+                      <div className="text-[9px] font-black uppercase text-slate-600 tracking-wider">In Theme</div>
+                    </div>
+                    <div className="text-center p-3 bg-blue-50 rounded-sm border border-blue-200">
+                      <div className="text-2xl font-black text-blue-700">{totalStudentsInDB}</div>
+                      <div className="text-[9px] font-black uppercase text-blue-600 tracking-wider">In Database</div>
+                    </div>
+                  </div>
+                  {isMissing && (
+                    <div className="bg-red-50 border-2 border-red-300 rounded-sm p-3 flex items-start gap-3">
+                      <i className="fas fa-exclamation-triangle text-red-600 text-lg mt-0.5"></i>
+                      <div className="flex-1 space-y-1">
+                        <p className="text-xs font-black uppercase text-red-900 tracking-wide">
+                          Theme Data Incomplete
+                        </p>
+                        <p className="text-[10px] text-red-700 leading-relaxed">
+                          This theme is missing {totalStudentsInDB - studentsInTheme} student{totalStudentsInDB - studentsInTheme !== 1 ? 's' : ''} from the database.
+                          This can happen when students are added after the theme was created.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm('Delete and regenerate this theme? All current assignments and progress for this theme will be lost.')) {
+                              handleDeleteTheme(activeTheme?.name || '');
+                            }
+                          }}
+                          className="mt-2 bg-red-600 text-white px-3 py-1.5 rounded text-[9px] font-black uppercase hover:bg-red-700 transition-colors"
+                        >
+                          <i className="fas fa-sync-alt mr-1"></i>
+                          Delete & Regenerate Theme
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {studentsInTheme > totalStudentsInDB && (
+                    <div className="bg-yellow-50 border-2 border-yellow-300 rounded-sm p-3 flex items-start gap-3">
+                      <i className="fas fa-info-circle text-yellow-600 text-lg mt-0.5"></i>
+                      <div className="flex-1">
+                        <p className="text-xs font-black uppercase text-yellow-900 tracking-wide">
+                          Duplicate Students Detected
+                        </p>
+                        <p className="text-[10px] text-yellow-700 leading-relaxed mt-1">
+                          There are {studentsInTheme - totalStudentsInDB} duplicate student entries in this theme. This shouldn't happen normally.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {bulkAssignMode && selectedStudents.size > 0 && (
               <div className="bg-[#f4c514] border-2 border-black p-4 rounded-sm shadow-lg">
                 <div className="flex items-center justify-between gap-4">
@@ -538,7 +646,16 @@ const Admin: React.FC = () => {
                 >
                   <div className={`px-4 py-2 flex items-center justify-between border-b ${cls.id === 'unassigned' ? 'bg-slate-200 border-slate-300' : 'bg-[#f4c514] border-black/20'
                     }`}>
-                    <span className="text-black font-extrabold text-lg uppercase py-1">{cls.name}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-black font-extrabold text-lg uppercase py-1">{cls.name}</span>
+                      <span className={`text-xs font-black px-2 py-0.5 rounded ${
+                        cls.id === 'unassigned'
+                          ? 'bg-slate-300 text-slate-700'
+                          : 'bg-black text-[#f4c514]'
+                      }`}>
+                        {cls.students.length}
+                      </span>
+                    </div>
                     {bulkAssignMode && cls.students.length > 0 && (
                       <button
                         type="button"
