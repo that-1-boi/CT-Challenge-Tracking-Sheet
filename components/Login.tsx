@@ -14,7 +14,8 @@ const Login: React.FC = () => {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (password === ADMIN_PASSWORD) {
-      localStorage.setItem('classroom_auth', 'true');
+      // Use sessionStorage instead of localStorage to auto-logout when browser closes
+      sessionStorage.setItem('classroom_auth', 'true');
       const origin = (location.state as any)?.from?.pathname || '/dashboard';
       navigate(origin);
     } else {

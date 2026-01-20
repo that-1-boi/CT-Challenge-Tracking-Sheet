@@ -11,7 +11,9 @@ import Login from './components/Login';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const isAuthenticated = localStorage.getItem('classroom_auth') === 'true';
+  // Use sessionStorage instead of localStorage to auto-logout when browser/tab closes
+  // This ensures that opening on a new device/browser automatically shows public view
+  const isAuthenticated = sessionStorage.getItem('classroom_auth') === 'true';
   const location = useLocation();
 
   if (!isAuthenticated) {

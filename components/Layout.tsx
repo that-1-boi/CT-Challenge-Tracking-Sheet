@@ -6,7 +6,8 @@ import logo from './logo.png';
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const isAuthenticated = localStorage.getItem('classroom_auth') === 'true';
+  // Use sessionStorage to auto-logout when browser/tab closes
+  const isAuthenticated = sessionStorage.getItem('classroom_auth') === 'true';
 
   const navItems = [
     { path: '/', label: 'Public Display', icon: 'fa-tv', protected: false },
@@ -17,7 +18,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   ];
 
   const handleLogout = () => {
-    localStorage.removeItem('classroom_auth');
+    sessionStorage.removeItem('classroom_auth');
     navigate('/'); // Redirect to public page
   };
 
