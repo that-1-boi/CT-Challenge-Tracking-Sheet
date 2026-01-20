@@ -1,1 +1,1 @@
-export { loadState, saveState, loadHistory, saveHistory, getAllStudentsFromDB, deleteStudent, deleteTheme } from './supabaseService';
+export { loadState, saveState, loadHistory, saveHistory, getAllStudentsFromDB, deleteStudent, deleteTheme, loadChallengeImages, loadPublicViewState, getPublicSettings, loadStudentSearchHistory } from './supabaseService';

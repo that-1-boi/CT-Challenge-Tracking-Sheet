@@ -185,13 +185,7 @@ export const loadState = async (): Promise<AppState> => {
           themeRow.challenge_4,
           themeRow.challenge_5,
         ],
-        challengeImages: [
-          themeRow.challenge_1_image || '',
-          themeRow.challenge_2_image || '',
-          themeRow.challenge_3_image || '',
-          themeRow.challenge_4_image || '',
-          themeRow.challenge_5_image || '',
-        ],
+        challengeImages: ['', '', '', '', ''], // Lazy loaded on-demand
         classes,
       };
     });
@@ -528,7 +522,7 @@ export const loadHistory = async (): Promise<HistoryEntry[]> => {
     const { data: progressData, error } = await supabase
       .from('v_student_roster')
       .select('*')
-      .order('last_updated', { ascending: false });
+      .order('last_updated', { ascending: false});
 
     if (error) {
       console.error('Error loading history:', error);
@@ -539,19 +533,21 @@ export const loadHistory = async (): Promise<HistoryEntry[]> => {
       return [];
     }
 
+    // FIX N+1: Load all themes ONCE instead of querying per row
+    const { data: allThemes } = await supabase
+      .from('themes')
+      .select('id, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5');
+
+    const themeMap = new Map(allThemes?.map(t => [t.id, t]) || []);
+
     // Convert roster view to history entries
     const history: HistoryEntry[] = [];
 
     for (const row of progressData as RosterViewRow[]) {
       if (!row.last_updated) continue; // Skip students with no progress
 
-      const completedChallenges: string[] = [];
-      const { data: themeData } = await supabase
-        .from('themes')
-        .select('challenge_1, challenge_2, challenge_3, challenge_4, challenge_5')
-        .eq('id', row.theme_id)
-        .single();
-
+      // Use Map lookup instead of database query (O(1) vs N queries)
+      const themeData = themeMap.get(row.theme_id);
       if (!themeData) continue;
 
       const allChallenges = [
@@ -562,6 +558,7 @@ export const loadHistory = async (): Promise<HistoryEntry[]> => {
         themeData.challenge_5,
       ];
 
+      const completedChallenges: string[] = [];
       if (row.c1) completedChallenges.push(allChallenges[0]);
       if (row.c2) completedChallenges.push(allChallenges[1]);
       if (row.c3) completedChallenges.push(allChallenges[2]);
@@ -593,6 +590,281 @@ export const saveHistory = async (_history: HistoryEntry[]): Promise<void> => {
   // History is now read-only and generated from progress
   // This function is kept for compatibility but does nothing
   console.log('ℹ History is generated from progress, no save needed');
+};
+
+// =============================================================================
+// LAZY LOAD CHALLENGE IMAGES
+// =============================================================================
+
+export const loadChallengeImages = async (themeName: string): Promise<string[]> => {
+  try {
+    const { data, error} = await supabase
+      .from('themes')
+      .select('challenge_1_image, challenge_2_image, challenge_3_image, challenge_4_image, challenge_5_image')
+      .eq('name', themeName)
+      .single();
+
+    if (error) {
+      console.error('Error loading challenge images:', error);
+      return ['', '', '', '', ''];
+    }
+
+    return [
+      data.challenge_1_image || '',
+      data.challenge_2_image || '',
+      data.challenge_3_image || '',
+      data.challenge_4_image || '',
+      data.challenge_5_image || ''
+    ];
+  } catch (error) {
+    console.error('Fatal error loading challenge images:', error);
+    return ['', '', '', '', ''];
+  }
+};
+
+// =============================================================================
+// OPTIMIZED PUBLIC VIEW LOADING
+// =============================================================================
+
+export const getPublicSettings = async (): Promise<{
+  publicThemeName: string;
+  publicClassId: string;
+}> => {
+  const [themeName, classId] = await Promise.all([
+    getAppSetting('public_theme_id'),
+    getAppSetting('public_class_id')
+  ]);
+
+  return {
+    publicThemeName: themeName || '',
+    publicClassId: classId || 'sat-am1'
+  };
+};
+
+export const loadPublicViewState = async (): Promise<AppState> => {
+  const startTime = Date.now();
+  console.log('📊 Loading public view state...');
+
+  // 1. Get current public settings
+  const { publicThemeName, publicClassId } = await getPublicSettings();
+
+  if (!publicThemeName) {
+    console.log('No public theme set');
+    return getDefaultAppState();
+  }
+
+  // 2. Load ONLY the public theme and class data using the optimized view
+  const { data: rosterData, error } = await supabase
+    .from('v_student_roster')
+    .select('*')
+    .eq('theme_name', publicThemeName)
+    .eq('class_session_id', publicClassId);
+
+  if (error) {
+    console.error('Error loading public roster:', error);
+    return getDefaultAppState();
+  }
+
+  if (!rosterData || rosterData.length === 0) {
+    console.log('No roster data found for theme:', publicThemeName, 'class:', publicClassId);
+
+    // Load theme details anyway so UI doesn't break
+    const { data: themeData } = await supabase
+      .from('themes')
+      .select('id, name, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5')
+      .eq('name', publicThemeName)
+      .single();
+
+    if (themeData) {
+      const theme: Theme = {
+        name: themeData.name,
+        challenges: [
+          themeData.challenge_1,
+          themeData.challenge_2,
+          themeData.challenge_3,
+          themeData.challenge_4,
+          themeData.challenge_5
+        ],
+        challengeImages: ['', '', '', '', ''],
+        classes: [{
+          id: publicClassId,
+          name: DEFAULT_CLASSES.find(c => c.id === publicClassId)?.name || publicClassId,
+          students: []
+        }]
+      };
+
+      return {
+        themes: [theme],
+        currentWeekTheme: publicThemeName,
+        publicThemeName,
+        publicClassId,
+        selectedClassId: publicClassId,
+        progress: {}
+      };
+    }
+
+    return getDefaultAppState();
+  }
+
+  // 3. Get theme details (without images)
+  const firstRow = rosterData[0] as RosterViewRow;
+  const { data: themeData } = await supabase
+    .from('themes')
+    .select('id, name, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5')
+    .eq('id', firstRow.theme_id)
+    .single();
+
+  if (!themeData) {
+    console.error('Theme not found for ID:', firstRow.theme_id);
+    return getDefaultAppState();
+  }
+
+  // 4. Build students array (deduplicate by student_id)
+  const studentMap = new Map<string, Student>();
+  (rosterData as RosterViewRow[]).forEach(row => {
+    if (!studentMap.has(row.student_id)) {
+      studentMap.set(row.student_id, {
+        id: row.student_id,
+        name: row.student_name
+      });
+    }
+  });
+  const students = Array.from(studentMap.values());
+
+  // 5. Build single theme object
+  const theme: Theme = {
+    name: themeData.name,
+    challenges: [
+      themeData.challenge_1,
+      themeData.challenge_2,
+      themeData.challenge_3,
+      themeData.challenge_4,
+      themeData.challenge_5
+    ],
+    challengeImages: ['', '', '', '', ''], // Lazy loaded
+    classes: [
+      {
+        id: publicClassId,
+        name: DEFAULT_CLASSES.find(c => c.id === publicClassId)?.name || publicClassId,
+        students
+      }
+    ]
+  };
+
+  // 6. Build progress map
+  const progress: Record<string, StudentProgress> = {};
+  (rosterData as RosterViewRow[]).forEach(row => {
+    const key = `${publicClassId}_${row.student_id}_${publicThemeName}`;
+    const challengesCompleted: string[] = [];
+
+    if (row.c1) challengesCompleted.push('c1');
+    if (row.c2) challengesCompleted.push('c2');
+    if (row.c3) challengesCompleted.push('c3');
+    if (row.c4) challengesCompleted.push('c4');
+    if (row.c5) challengesCompleted.push('c5');
+
+    progress[key] = {
+      studentId: row.student_id,
+      studentName: row.student_name,
+      challengesCompleted,
+      timestamp: row.last_updated ? new Date(row.last_updated).getTime() : 0
+    };
+  });
+
+  const elapsed = Date.now() - startTime;
+  console.log(`✅ Public view state loaded in ${elapsed}ms`);
+
+  return {
+    themes: [theme],
+    currentWeekTheme: publicThemeName,
+    publicThemeName,
+    publicClassId,
+    selectedClassId: publicClassId,
+    progress
+  };
+};
+
+// =============================================================================
+// STUDENT SEARCH WITH DATABASE FILTERING
+// =============================================================================
+
+export const loadStudentSearchHistory = async (
+  searchFilter?: string
+): Promise<HistoryEntry[]> => {
+  try {
+    let query = supabase
+      .from('v_student_roster')
+      .select('*')
+      .order('last_updated', { ascending: false });
+
+    // Apply database-level filtering if search provided
+    if (searchFilter && searchFilter.trim()) {
+      query = query.ilike('student_name', `%${searchFilter.trim()}%`);
+    }
+
+    const { data: progressData, error } = await query;
+
+    if (error) {
+      console.error('Error loading student search history:', error);
+      return [];
+    }
+
+    if (!progressData || progressData.length === 0) {
+      return [];
+    }
+
+    // Fix N+1: Load all relevant themes once
+    const themeIds = [...new Set((progressData as RosterViewRow[]).map(r => r.theme_id))];
+    const { data: allThemes } = await supabase
+      .from('themes')
+      .select('id, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5')
+      .in('id', themeIds);
+
+    const themeMap = new Map(allThemes?.map(t => [t.id, t]) || []);
+
+    // Build history entries
+    const history: HistoryEntry[] = [];
+
+    for (const row of progressData as RosterViewRow[]) {
+      if (!row.last_updated) continue;
+
+      const themeData = themeMap.get(row.theme_id);
+      if (!themeData) continue;
+
+      const allChallenges = [
+        themeData.challenge_1,
+        themeData.challenge_2,
+        themeData.challenge_3,
+        themeData.challenge_4,
+        themeData.challenge_5
+      ];
+
+      const completedChallenges: string[] = [];
+      if (row.c1) completedChallenges.push(allChallenges[0]);
+      if (row.c2) completedChallenges.push(allChallenges[1]);
+      if (row.c3) completedChallenges.push(allChallenges[2]);
+      if (row.c4) completedChallenges.push(allChallenges[3]);
+      if (row.c5) completedChallenges.push(allChallenges[4]);
+
+      const date = new Date(row.last_updated);
+
+      history.push({
+        id: `${row.student_id}_${row.theme_id}_${date.toISOString()}`,
+        studentName: row.student_name,
+        className: row.class_session_name,
+        weekName: `Session ${date.toLocaleDateString()}`,
+        weekTheme: row.theme_name,
+        challenges: completedChallenges,
+        allAvailableChallenges: allChallenges,
+        date: row.last_updated
+      });
+    }
+
+    return history;
+  } catch (error) {
+    console.error('Fatal error loading student search history:', error);
+    return [];
+  }
 };
 
 // =============================================================================

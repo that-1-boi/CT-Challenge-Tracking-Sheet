@@ -1,20 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, HistoryEntry, StudentProgress } from '../types';
-import { loadState, saveState, loadHistory } from '../services/storageService';
+import { loadState, saveState, loadHistory, loadChallengeImages, loadPublicViewState, getPublicSettings } from '../services/storageService';
 
 const LivePublicView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChallenge, setSelectedChallenge] = useState<{ name: string, image?: string } | null>(null);
-  
+  const [challengeImages, setChallengeImages] = useState<Record<string, string[]>>({});
+
   // Track user's manual class selection separately
   const userSelectedClassId = useRef<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [loadedState, loadedHistory] = await Promise.all([loadState(), loadHistory()]);
+        // Use optimized load function that only loads public view data
+        const [loadedState, loadedHistory] = await Promise.all([
+          loadPublicViewState(),
+          loadHistory()
+        ]);
         console.log('LivePublicView: Loaded', loadedHistory.length, 'history entries');
         setState(loadedState);
         setHistory(loadedHistory);
@@ -27,11 +32,15 @@ const LivePublicView: React.FC = () => {
 
     loadData();
 
-    // Poll for updates every 2 seconds
+    // Poll for updates every 10 seconds (reduced from 2s for performance)
     const interval = setInterval(async () => {
       try {
-        const [loadedState, loadedHistory] = await Promise.all([loadState(), loadHistory()]);
-        
+        // Use optimized load function for polling
+        const [loadedState, loadedHistory] = await Promise.all([
+          loadPublicViewState(),
+          loadHistory()
+        ]);
+
         // If user has manually selected a class, preserve it
         if (userSelectedClassId.current) {
           setState({
@@ -41,12 +50,12 @@ const LivePublicView: React.FC = () => {
         } else {
           setState(loadedState);
         }
-        
+
         setHistory(loadedHistory);
       } catch (error) {
         console.error('Error polling state:', error);
       }
-    }, 2000);
+    }, 10000);
 
     return () => {
       clearInterval(interval);
@@ -125,11 +134,19 @@ const LivePublicView: React.FC = () => {
     activeTheme?.classes.find(c => c.id !== 'unassigned') ||
     activeTheme?.classes[0];
 
-  const openChallengeDetails = (index: number) => {
+  const openChallengeDetails = async (index: number) => {
     if (!activeTheme) return;
+
+    // Load images only when modal opens (lazy load)
+    let images = challengeImages[activeTheme.name];
+    if (!images || images.length === 0) {
+      images = await loadChallengeImages(activeTheme.name);
+      setChallengeImages(prev => ({ ...prev, [activeTheme.name]: images }));
+    }
+
     setSelectedChallenge({
       name: activeTheme.challenges[index],
-      image: activeTheme.challengeImages ? activeTheme.challengeImages[index] : undefined
+      image: images[index]
     });
   };
 
