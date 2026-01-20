@@ -30,6 +30,7 @@ const StudentSearch: React.FC = () => {
   }, [search, allStudents]);
 
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const studentData = useMemo(() => {
     if (!selectedStudent) return [];
@@ -83,7 +84,35 @@ const StudentSearch: React.FC = () => {
                 setSearch(e.target.value);
                 // Keep selected student if they still match, otherwise we might want to keep it anyway
               }}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => {
+                // Delay hiding to allow click on suggestions
+                setTimeout(() => setSearchFocused(false), 200);
+              }}
             />
+            {/* Mobile dropdown suggestions - only visible when search is active on mobile */}
+            {search && searchFocused && filteredStudents.length > 0 && (
+              <div className="lg:hidden absolute left-0 right-0 top-full z-50 bg-[#fff1d1] border border-[#f4c514] border-t-0 max-h-[200px] overflow-y-auto shadow-lg">
+                {filteredStudents.slice(0, 8).map(name => (
+                  <button
+                    key={name}
+                    onClick={() => {
+                      setSelectedStudent(name);
+                      setSearch('');
+                      setSearchFocused(false);
+                    }}
+                    className="w-full text-left p-3 font-black uppercase text-xs hover:bg-[#f4c514] transition-colors border-b border-[#ffe5a0] last:border-b-0"
+                  >
+                    {name}
+                  </button>
+                ))}
+                {filteredStudents.length > 8 && (
+                  <div className="p-2 text-center text-[10px] text-gray-400 font-bold">
+                    +{filteredStudents.length - 8} more results
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Suggested students list - hidden on mobile (< 1024px / lg breakpoint) */}
