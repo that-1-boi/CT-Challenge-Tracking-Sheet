@@ -320,9 +320,9 @@ const Dashboard: React.FC = () => {
                   const percent = (completedCount / 5) * 100;
 
                   return (
-                    <tr key={student.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50/50 group">
-                      <td className="p-0.5 landscape-phone:p-0.5 sm:p-2 md:p-3 border-r border-slate-100">
-                        <div className="text-[8px] landscape-phone:text-[7px] sm:text-sm md:text-base font-black text-black uppercase tracking-tight truncate max-w-[60px] sm:max-w-none">
+                    <tr key={student.id} className="border-b border-slate-100 landscape-phone:border-0 transition-colors hover:bg-slate-50/50 group">
+                      <td className="p-0.5 landscape-phone:py-0.5 landscape-phone:px-1 sm:p-2 md:p-3 border-r border-slate-100">
+                        <div className="text-[8px] landscape-phone:text-[7px] landscape-phone:leading-tight sm:text-sm md:text-base font-black text-black uppercase tracking-tight truncate max-w-[60px] sm:max-w-none">
                           {student.name}
                         </div>
                       </td>
@@ -332,22 +332,22 @@ const Dashboard: React.FC = () => {
                         return (
                           <td
                             key={idx}
-                            className="p-0 landscape-phone:p-0 sm:p-1 md:p-2 border-r border-slate-100 text-center cursor-pointer relative overflow-hidden"
+                            className="p-0 landscape-phone:py-0.5 sm:p-1 md:p-2 border-r border-slate-100 text-center cursor-pointer relative overflow-hidden"
                             onClick={() => toggleChallenge(student.name, idx)}
                           >
                             <div className="flex items-center justify-center relative z-10">
                               {isDone ? (
-                                <div className="w-4 h-4 landscape-phone:w-4 landscape-phone:h-4 sm:w-7 sm:h-7 md:w-8 md:h-8 bg-[#f4c514] rounded-full flex items-center justify-center shadow-sm animate-in zoom-in duration-300">
-                                  <i className="fas fa-check text-black text-[8px] landscape-phone:text-[8px] sm:text-sm md:text-base"></i>
+                                <div className="w-4 h-4 landscape-phone:w-3 landscape-phone:h-3 sm:w-7 sm:h-7 md:w-8 md:h-8 bg-[#f4c514] rounded-full flex items-center justify-center shadow-sm animate-in zoom-in duration-300">
+                                  <i className="fas fa-check text-black text-[8px] landscape-phone:text-[6px] sm:text-sm md:text-base"></i>
                                 </div>
                               ) : (
-                                <div className="w-4 h-4 landscape-phone:w-4 landscape-phone:h-4 sm:w-7 sm:h-7 md:w-8 md:h-8 border border-slate-200 rounded-full group-hover:border-[#f4c514]/30 transition-colors"></div>
+                                <div className="w-4 h-4 landscape-phone:w-3 landscape-phone:h-3 sm:w-7 sm:h-7 md:w-8 md:h-8 border border-slate-200 rounded-full group-hover:border-[#f4c514]/30 transition-colors"></div>
                               )}
                             </div>
                           </td>
                         );
                       })}
-                      <td className="p-0.5 landscape-phone:p-0.5 sm:p-2 md:p-3 text-center bg-slate-50/50 font-black text-black text-[8px] landscape-phone:text-[7px] sm:text-[10px]">
+                      <td className="p-0.5 landscape-phone:py-0.5 sm:p-2 md:p-3 text-center bg-slate-50/50 font-black text-black text-[8px] landscape-phone:text-[7px] landscape-phone:leading-tight sm:text-[10px]">
                         {Math.round(percent)}%
                         <div className="text-[6px] sm:text-[8px] text-gray-400 font-normal hidden sm:block landscape-phone:hidden">{completedCount}/5</div>
                       </td>

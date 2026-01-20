@@ -298,27 +298,27 @@ const LivePublicView: React.FC = () => {
                 const percent = (completedCount / 5) * 100;
 
                 return (
-                  <tr key={student.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                    <td className="p-0.5 landscape-phone:p-0.5 sm:p-3 md:p-4 border-r border-slate-100 text-[8px] landscape-phone:text-[7px] sm:text-lg md:text-xl font-black text-black uppercase tracking-tighter italic truncate max-w-[60px] sm:max-w-none">{student.name}</td>
+                  <tr key={student.id} className="border-b border-slate-100 landscape-phone:border-0 hover:bg-slate-50/50 transition-colors">
+                    <td className="p-0.5 landscape-phone:py-0.5 landscape-phone:px-1 sm:p-3 md:p-4 border-r border-slate-100 text-[8px] landscape-phone:text-[7px] landscape-phone:leading-tight sm:text-lg md:text-xl font-black text-black uppercase tracking-tighter italic truncate max-w-[60px] sm:max-w-none">{student.name}</td>
                     {[0, 1, 2, 3, 4].map((idx) => {
                       const challengeId = `c${idx + 1}`;
                       const isDone = progress.challenges.includes(challengeId);
                       return (
-                        <td key={idx} className="p-0 landscape-phone:p-0 sm:p-2 border-r border-slate-100 text-center">
+                        <td key={idx} className="p-0 landscape-phone:py-0.5 sm:p-2 border-r border-slate-100 text-center">
                           <div className="flex items-center justify-center">
                             {isDone ? (
-                              <div className="w-4 h-4 landscape-phone:w-4 landscape-phone:h-4 sm:w-8 sm:h-8 md:w-10 md:h-10 bg-[#f4c514] rounded-full flex items-center justify-center shadow-md animate-in zoom-in duration-500">
-                                <i className="fas fa-check text-black text-[8px] landscape-phone:text-[8px] sm:text-lg md:text-xl"></i>
+                              <div className="w-4 h-4 landscape-phone:w-3 landscape-phone:h-3 sm:w-8 sm:h-8 md:w-10 md:h-10 bg-[#f4c514] rounded-full flex items-center justify-center shadow-md animate-in zoom-in duration-500">
+                                <i className="fas fa-check text-black text-[8px] landscape-phone:text-[6px] sm:text-lg md:text-xl"></i>
                               </div>
                             ) : (
-                              <div className="w-4 h-4 landscape-phone:w-4 landscape-phone:h-4 sm:w-8 sm:h-8 md:w-10 md:h-10 border-2 border-slate-100 rounded-full bg-slate-50/20"></div>
+                              <div className="w-4 h-4 landscape-phone:w-3 landscape-phone:h-3 sm:w-8 sm:h-8 md:w-10 md:h-10 border-2 border-slate-100 rounded-full bg-slate-50/20"></div>
                             )}
                           </div>
                         </td>
                       );
                     })}
-                    <td className="p-0.5 landscape-phone:p-0.5 sm:p-3 md:p-4 text-center bg-slate-50/30">
-                      <div className="text-[8px] landscape-phone:text-[7px] sm:text-sm font-black text-black leading-none">{Math.round(percent)}%</div>
+                    <td className="p-0.5 landscape-phone:py-0.5 sm:p-3 md:p-4 text-center bg-slate-50/30">
+                      <div className="text-[8px] landscape-phone:text-[7px] landscape-phone:leading-tight sm:text-sm font-black text-black leading-none">{Math.round(percent)}%</div>
                       <div className="w-full bg-slate-200 h-0.5 sm:h-1 mt-0.5 sm:mt-1 rounded-full overflow-hidden hidden sm:block landscape-phone:hidden">
                         <div
                           className="bg-[#f4c514] h-full transition-all duration-1000 ease-out"
