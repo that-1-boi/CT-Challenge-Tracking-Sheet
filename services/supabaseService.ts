@@ -435,6 +435,47 @@ export const saveState = async (state: AppState): Promise<void> => {
 
     console.log(`  ✓ Progress: ${progressSaved} saved, ${progressErrors} errors`);
 
+    // 4b. ENSURE ALL ASSIGNED STUDENTS HAVE PROGRESS RECORDS (even if empty)
+    console.log('  📝 Ensuring all assigned students have progress records...');
+    let progressInitialized = 0;
+
+    for (const assignment of currentAssignments) {
+      // Check if progress already exists for this student-theme combination
+      const existingProgress = Object.entries(state.progress).find(([key]) => {
+        const parts = key.split('_');
+        if (parts.length < 3) return false;
+        const studentId = parts[1];
+        const themeName = parts.slice(2).join('_');
+        const themeId = themeIdMap.get(themeName);
+        return studentId === assignment.student_id && themeId === assignment.theme_id;
+      });
+
+      // If no progress exists, create an empty progress record
+      if (!existingProgress) {
+        const { error } = await supabase
+          .from('student_progress')
+          .upsert({
+            student_id: assignment.student_id,
+            theme_id: assignment.theme_id,
+            class_session_id: assignment.class_session_id,
+            challenge_1_completed: false,
+            challenge_2_completed: false,
+            challenge_3_completed: false,
+            challenge_4_completed: false,
+            challenge_5_completed: false,
+            last_updated: new Date().toISOString(),
+          }, { onConflict: 'student_id,theme_id' });
+
+        if (!error) {
+          progressInitialized++;
+        }
+      }
+    }
+
+    if (progressInitialized > 0) {
+      console.log(`  ✓ Initialized ${progressInitialized} empty progress records`);
+    }
+
     // 5. SAVE APP SETTINGS
     await setAppSetting('current_week_theme_id', state.currentWeekTheme);
     await setAppSetting('public_theme_id', state.publicThemeName);
