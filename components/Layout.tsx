@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import logo from './logo.png';
 
@@ -8,6 +8,31 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   // Use sessionStorage to auto-logout when browser/tab closes
   const isAuthenticated = sessionStorage.getItem('classroom_auth') === 'true';
+
+  // Mobile sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+      if (window.innerWidth >= 768) {
+        setSidebarOpen(false);
+      }
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Close sidebar when route changes on mobile
+  useEffect(() => {
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
+  }, [location.pathname, isMobile]);
 
   const navItems = [
     { path: '/', label: 'Public Display', icon: 'fa-tv', protected: false },
@@ -30,12 +55,52 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <div className="min-h-screen flex bg-white w-full overflow-x-hidden">
-      {/* Sidebar */}
-      <aside className="w-16 md:w-20 bg-[#1a1a1a] flex flex-col items-center py-6 shrink-0 fixed h-full z-50 shadow-2xl">
-        <div className="mb-auto flex flex-col items-center gap-6 w-full px-2">
-          {/* Logo*/}
-          <div className="w-15 h-15 md:w-14 md:h-14 bg-black flex items-center justify-center rounded-sm overflow-hidden shadow-inner group cursor-pointer" onClick={() => navigate('/')}>
+      {/* Mobile Overlay */}
+      {isMobile && sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Mobile Logo Bar (collapsed sidebar) */}
+      {isMobile && !sidebarOpen && (
+        <div className="fixed top-0 left-0 w-14 h-14 bg-[#1a1a1a] z-50 flex items-center justify-center shadow-2xl">
+          <div
+            className="w-10 h-10 bg-black flex items-center justify-center rounded-sm overflow-hidden cursor-pointer"
+            onClick={() => setSidebarOpen(true)}
+          >
             <img src={logo} alt="Logo" className="w-full h-full object-contain" />
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar - full on desktop, toggleable on mobile */}
+      <aside className={`
+        ${isMobile
+          ? `fixed h-full z-50 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+          : 'fixed h-full z-50'
+        }
+        w-16 md:w-20 bg-[#1a1a1a] flex flex-col items-center py-6 shrink-0 shadow-2xl
+      `}>
+        <div className="mb-auto flex flex-col items-center gap-6 w-full px-2">
+          {/* Logo */}
+          <div
+            className="w-12 h-12 md:w-14 md:h-14 bg-black flex items-center justify-center rounded-sm overflow-hidden shadow-inner group cursor-pointer relative"
+            onClick={() => {
+              if (isMobile && sidebarOpen) {
+                setSidebarOpen(false);
+              }
+              navigate('/');
+            }}
+          >
+            <img src={logo} alt="Logo" className="w-full h-full object-contain" />
+            {/* Close button overlay on mobile */}
+            {isMobile && sidebarOpen && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                <i className="fas fa-times text-white text-sm"></i>
+              </div>
+            )}
           </div>
 
           <nav className="flex flex-col gap-6 md:gap-8">
@@ -84,8 +149,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 ml-16 md:ml-20 min-h-screen bg-white w-full">
-        <div className="w-full mx-auto p-4 md:p-8 lg:p-10">
+      <main className={`flex-1 min-h-screen bg-white w-full ${isMobile ? 'ml-0 pt-14' : 'ml-16 md:ml-20'}`}>
+        <div className="w-full mx-auto p-2 sm:p-4 md:p-8 lg:p-10">
           {children}
         </div>
       </main>

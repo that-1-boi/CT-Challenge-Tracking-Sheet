@@ -173,7 +173,7 @@ const LivePublicView: React.FC = () => {
   const availableClasses = DEFAULT_CLASSES.filter(c => c.id !== 'unassigned');
 
   return (
-    <div className="w-full max-w-[1400px] mx-auto px-4 md:px-8 animate-in fade-in duration-1000">
+    <div className="w-full max-w-[1400px] mx-auto px-1 sm:px-4 md:px-8 animate-in fade-in duration-1000 overflow-hidden">
       {/* Challenge Info Modal - Refined sizing and visibility */}
       {selectedChallenge && (
         <div
@@ -234,28 +234,29 @@ const LivePublicView: React.FC = () => {
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4 border-b-4 border-black pb-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-1">
-            <span className="bg-red-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-sm animate-pulse tracking-widest uppercase shadow-sm">Live Broadcast</span>
-            <span className="text-black font-bold text-[10px] uppercase tracking-widest">{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+      {/* Header - responsive */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-4 sm:mb-6 gap-2 sm:gap-4 border-b-2 sm:border-b-4 border-black pb-2 sm:pb-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 mb-1">
+            <span className="bg-red-600 text-white text-[7px] sm:text-[8px] font-black px-1 sm:px-1.5 py-0.5 rounded-sm animate-pulse tracking-widest uppercase shadow-sm">Live</span>
+            <span className="text-black font-bold text-[9px] sm:text-[10px] uppercase tracking-widest">{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
           </div>
 
-          <div className="flex flex-wrap items-baseline gap-2 group">
+          <div className="flex flex-wrap items-baseline gap-1 sm:gap-2 group">
             <div className="relative flex items-center">
               <select
                 value={state.publicClassId}
                 onChange={handleClassChange}
-                className="text-4xl md:text-5xl lg:text-6xl font-black text-black tracking-tighter uppercase italic leading-none appearance-none bg-transparent border-none outline-none cursor-pointer hover:text-[#f4c514] transition-colors pr-12 z-10 min-w-[280px] md:min-w-[400px]"
+                className="text-xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-black tracking-tighter uppercase italic leading-none appearance-none bg-transparent border-none outline-none cursor-pointer hover:text-[#f4c514] transition-colors pr-6 sm:pr-12 z-10 min-w-[140px] sm:min-w-[280px] md:min-w-[400px]"
               >
-                {availableClasses.map(c => <option key={c.id} value={c.id} className="text-lg italic font-black bg-white">{c.name}</option>)}
+                {availableClasses.map(c => <option key={c.id} value={c.id} className="text-sm sm:text-lg italic font-black bg-white">{c.name}</option>)}
               </select>
-              <i className="fas fa-caret-down text-2xl text-black/20 absolute right-2 bottom-1 pointer-events-none group-hover:text-[#f4c514]/50"></i>
+              <i className="fas fa-caret-down text-lg sm:text-2xl text-black/20 absolute right-1 sm:right-2 bottom-0 sm:bottom-1 pointer-events-none group-hover:text-[#f4c514]/50"></i>
             </div>
 
-            <div className="flex items-baseline gap-2">
-              <span className="text-[#f4c514] text-4xl md:text-6xl font-normal not-italic">/</span>
-              <h2 className="text-3xl md:text-5xl lg:text-6xl font-black text-black tracking-tighter uppercase italic leading-none opacity-100">
+            <div className="flex items-baseline gap-1 sm:gap-2">
+              <span className="text-[#f4c514] text-xl sm:text-4xl md:text-6xl font-normal not-italic">/</span>
+              <h2 className="text-lg sm:text-3xl md:text-5xl lg:text-6xl font-black text-black tracking-tighter uppercase italic leading-none opacity-100 truncate max-w-[120px] sm:max-w-none">
                 {state.publicThemeName}
               </h2>
             </div>
@@ -263,28 +264,29 @@ const LivePublicView: React.FC = () => {
         </div>
       </div>
 
+      {/* Table container - responsive sizing */}
       <div className="bg-white shadow-2xl rounded-sm overflow-hidden border border-black/5">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+        <div className="w-full overflow-x-auto portrait:overflow-y-auto portrait:max-h-[60vh]">
+          <table className="w-full border-collapse table-fixed min-w-[320px]">
             <thead>
               <tr className="bg-[#f4c514] text-black">
-                <th className="p-3 md:p-4 text-left w-1/4 border-r border-black/10">
-                  <span className="text-[10px] uppercase font-black tracking-widest text-black">Student Name</span>
+                <th className="p-1.5 sm:p-3 md:p-4 text-left w-[20%] min-w-[60px] border-r border-black/10">
+                  <span className="text-[8px] sm:text-[10px] uppercase font-black tracking-widest text-black">Student</span>
                 </th>
                 {activeTheme.challenges.map((chName, i) => (
                   <th
                     key={i}
                     onClick={() => openChallengeDetails(i)}
-                    className="p-3 md:p-4 border-r border-black/10 text-center min-w-[120px] cursor-pointer group/header hover:bg-black transition-colors"
+                    className="p-1 sm:p-3 md:p-4 border-r border-black/10 text-center w-[13%] cursor-pointer group/header hover:bg-black transition-colors"
                   >
                     <div className="flex flex-col items-center">
-                      <span className="text-black group-hover/header:text-[#f4c514] font-black text-base uppercase tracking-tighter transition-colors">C{i + 1}</span>
-                      <span className="text-[11px] text-black group-hover/header:text-white font-bold uppercase truncate max-w-[110px] leading-tight opacity-90 transition-colors">{chName}</span>
+                      <span className="text-black group-hover/header:text-[#f4c514] font-black text-[10px] sm:text-base uppercase tracking-tighter transition-colors">C{i + 1}</span>
+                      <span className="text-[8px] sm:text-[11px] text-black group-hover/header:text-white font-bold uppercase truncate max-w-[40px] sm:max-w-[110px] leading-tight opacity-90 transition-colors hidden sm:block">{chName}</span>
                     </div>
                   </th>
                 ))}
-                <th className="p-3 md:p-4 text-center w-24">
-                  <span className="text-[8px] uppercase font-black tracking-widest text-black">Mastery</span>
+                <th className="p-1 sm:p-3 md:p-4 text-center w-[12%] min-w-[40px]">
+                  <span className="text-[7px] sm:text-[8px] uppercase font-black tracking-widest text-black">%</span>
                 </th>
               </tr>
             </thead>
@@ -297,27 +299,27 @@ const LivePublicView: React.FC = () => {
 
                 return (
                   <tr key={student.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                    <td className="p-3 md:p-4 border-r border-slate-100 text-lg md:text-xl font-black text-black uppercase tracking-tighter italic whitespace-nowrap">{student.name}</td>
+                    <td className="p-1 sm:p-3 md:p-4 border-r border-slate-100 text-[10px] sm:text-lg md:text-xl font-black text-black uppercase tracking-tighter italic truncate">{student.name}</td>
                     {[0, 1, 2, 3, 4].map((idx) => {
                       const challengeId = `c${idx + 1}`;
                       const isDone = progress.challenges.includes(challengeId);
                       return (
-                        <td key={idx} className="p-2 border-r border-slate-100 text-center">
+                        <td key={idx} className="p-0.5 sm:p-2 border-r border-slate-100 text-center">
                           <div className="flex items-center justify-center">
                             {isDone ? (
-                              <div className="w-8 h-8 md:w-10 md:h-10 bg-[#f4c514] rounded-full flex items-center justify-center shadow-md animate-in zoom-in duration-500">
-                                <i className="fas fa-check text-black text-lg md:text-xl"></i>
+                              <div className="w-5 h-5 sm:w-8 sm:h-8 md:w-10 md:h-10 bg-[#f4c514] rounded-full flex items-center justify-center shadow-md animate-in zoom-in duration-500">
+                                <i className="fas fa-check text-black text-[10px] sm:text-lg md:text-xl"></i>
                               </div>
                             ) : (
-                              <div className="w-8 h-8 md:w-10 md:h-10 border-2 border-slate-100 rounded-full bg-slate-50/20"></div>
+                              <div className="w-5 h-5 sm:w-8 sm:h-8 md:w-10 md:h-10 border-2 border-slate-100 rounded-full bg-slate-50/20"></div>
                             )}
                           </div>
                         </td>
                       );
                     })}
-                    <td className="p-3 md:p-4 text-center bg-slate-50/30">
-                      <div className="text-sm font-black text-black leading-none">{Math.round(percent)}%</div>
-                      <div className="w-full bg-slate-200 h-1 mt-1 rounded-full overflow-hidden">
+                    <td className="p-1 sm:p-3 md:p-4 text-center bg-slate-50/30">
+                      <div className="text-[9px] sm:text-sm font-black text-black leading-none">{Math.round(percent)}%</div>
+                      <div className="w-full bg-slate-200 h-0.5 sm:h-1 mt-0.5 sm:mt-1 rounded-full overflow-hidden hidden sm:block">
                         <div
                           className="bg-[#f4c514] h-full transition-all duration-1000 ease-out"
                           style={{ width: `${percent}%` }}
@@ -329,8 +331,8 @@ const LivePublicView: React.FC = () => {
               })}
               {currentClass.students.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-16 text-center">
-                    <p className="text-xl font-black text-slate-300 uppercase italic tracking-tighter">No active roster</p>
+                  <td colSpan={7} className="p-8 sm:p-16 text-center">
+                    <p className="text-sm sm:text-xl font-black text-slate-300 uppercase italic tracking-tighter">No active roster</p>
                   </td>
                 </tr>
               )}
@@ -339,12 +341,13 @@ const LivePublicView: React.FC = () => {
         </div>
       </div>
 
-      <div className="mt-6 flex justify-between items-center text-slate-400">
+      {/* Footer - responsive */}
+      <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row justify-between items-center text-slate-400 gap-1 sm:gap-0">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
-          <span className="text-[8px] font-black uppercase tracking-widest">Real-time Cloud Sync</span>
+          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-600 rounded-full animate-pulse"></div>
+          <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest">Real-time Cloud Sync</span>
         </div>
-        <div className="text-[8px] font-black uppercase tracking-[0.2em]">Cautiontape Challenge Tracking &copy; 2025</div>
+        <div className="text-[6px] sm:text-[8px] font-black uppercase tracking-[0.2em]">Cautiontape Challenge Tracking &copy; 2025</div>
       </div>
     </div>
   );
