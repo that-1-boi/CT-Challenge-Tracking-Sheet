@@ -868,6 +868,27 @@ export const loadStudentSearchHistory = async (
 };
 
 // =============================================================================
+// UPDATE PUBLIC SETTINGS
+// =============================================================================
+
+export const updatePublicSettings = async (
+  publicThemeName?: string,
+  publicClassId?: string
+): Promise<void> => {
+  const updates = [];
+
+  if (publicThemeName !== undefined) {
+    updates.push(setAppSetting('public_theme_id', publicThemeName));
+  }
+
+  if (publicClassId !== undefined) {
+    updates.push(setAppSetting('public_class_id', publicClassId));
+  }
+
+  await Promise.all(updates);
+};
+
+// =============================================================================
 // GET ALL STUDENTS FROM DATABASE
 // =============================================================================
 

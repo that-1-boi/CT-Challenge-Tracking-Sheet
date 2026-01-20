@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, HistoryEntry, StudentProgress } from '../types';
-import { loadState, saveState, loadHistory, loadChallengeImages, loadPublicViewState, getPublicSettings } from '../services/storageService';
+import { loadState, saveState, loadHistory, loadChallengeImages, loadPublicViewState, getPublicSettings, updatePublicSettings } from '../services/storageService';
+import { DEFAULT_CLASSES } from '../constants';
 
 const LivePublicView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
@@ -63,20 +64,27 @@ const LivePublicView: React.FC = () => {
   }, []);
 
   const handleClassChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    if (!state) return;
     const newClassId = e.target.value;
-    
+
     // Store user's selection in ref
     userSelectedClassId.current = newClassId;
-    
-    const newState = { ...state, publicClassId: newClassId };
-    setState(newState);
-    
+
+    // Show loading state
+    setLoading(true);
+
     try {
-      await saveState(newState);
+      // Update public settings in database
+      await updatePublicSettings(undefined, newClassId);
+
+      // Load new class data
+      const loadedState = await loadPublicViewState();
+      setState(loadedState);
+
       window.dispatchEvent(new Event('storage'));
     } catch (error) {
-      console.error('Error saving state:', error);
+      console.error('Error changing class:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -161,7 +169,8 @@ const LivePublicView: React.FC = () => {
     );
   }
 
-  const availableClasses = activeTheme.classes.filter(c => c.id !== 'unassigned');
+  // Show all available classes from DEFAULT_CLASSES, not just those with students
+  const availableClasses = DEFAULT_CLASSES.filter(c => c.id !== 'unassigned');
 
   return (
     <div className="w-full max-w-[1400px] mx-auto px-4 md:px-8 animate-in fade-in duration-1000">
@@ -235,7 +244,7 @@ const LivePublicView: React.FC = () => {
           <div className="flex flex-wrap items-baseline gap-2 group">
             <div className="relative flex items-center">
               <select
-                value={currentClass.id}
+                value={state.publicClassId}
                 onChange={handleClassChange}
                 className="text-4xl md:text-5xl lg:text-6xl font-black text-black tracking-tighter uppercase italic leading-none appearance-none bg-transparent border-none outline-none cursor-pointer hover:text-[#f4c514] transition-colors pr-12 z-10 min-w-[280px] md:min-w-[400px]"
               >
