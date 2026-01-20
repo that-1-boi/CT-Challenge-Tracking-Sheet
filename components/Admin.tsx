@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, Theme, Student } from '../types';
-import { loadState, saveState, getAllStudentsFromDB } from '../services/storageService';
+import { loadState, saveState, getAllStudentsFromDB, deleteStudent, deleteTheme } from '../services/storageService';
 import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
 
 const Admin: React.FC = () => {
@@ -252,6 +252,73 @@ const Admin: React.FC = () => {
       currentWeekTheme: name
     }));
     setNewThemeName('');
+  };
+
+  const handleDeleteStudent = async (studentId: string, studentName: string) => {
+    if (!confirm(`Are you sure you want to permanently delete ${studentName} from the entire database? This will remove all their progress and assignments across all themes.`)) {
+      return;
+    }
+
+    try {
+      await deleteStudent(studentId);
+
+      // Remove student from all themes in state
+      setState(prev => ({
+        ...prev,
+        themes: prev.themes.map(theme => ({
+          ...theme,
+          classes: theme.classes.map(cls => ({
+            ...cls,
+            students: cls.students.filter(s => s.id !== studentId)
+          }))
+        })),
+        // Remove student's progress from state
+        progress: Object.fromEntries(
+          Object.entries(prev.progress).filter(([key]) => !key.includes(studentId))
+        )
+      }));
+
+      alert(`${studentName} has been deleted successfully.`);
+    } catch (error) {
+      console.error('Error deleting student:', error);
+      alert('Failed to delete student. Please try again.');
+    }
+  };
+
+  const handleDeleteTheme = async (themeName: string) => {
+    if (state.themes.length <= 1) {
+      alert('Cannot delete the last theme. At least one theme must exist.');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to permanently delete the theme "${themeName}"? This will remove all student assignments and progress for this theme.`)) {
+      return;
+    }
+
+    try {
+      await deleteTheme(themeName);
+
+      // Remove theme from state
+      const remainingThemes = state.themes.filter(t => t.name !== themeName);
+      const newCurrentTheme = state.currentWeekTheme === themeName ? remainingThemes[0].name : state.currentWeekTheme;
+      const newPublicTheme = state.publicThemeName === themeName ? remainingThemes[0].name : state.publicThemeName;
+
+      setState(prev => ({
+        ...prev,
+        themes: remainingThemes,
+        currentWeekTheme: newCurrentTheme,
+        publicThemeName: newPublicTheme,
+        // Remove theme's progress from state
+        progress: Object.fromEntries(
+          Object.entries(prev.progress).filter(([key]) => !key.endsWith(`_${themeName}`))
+        )
+      }));
+
+      alert(`Theme "${themeName}" has been deleted successfully.`);
+    } catch (error) {
+      console.error('Error deleting theme:', error);
+      alert('Failed to delete theme. Please try again.');
+    }
   };
 
   // Toggle student selection for bulk operations
@@ -542,6 +609,19 @@ const Admin: React.FC = () => {
                                 </span>
                               )}
                             </div>
+                            {!bulkAssignMode && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteStudent(student.id, student.name);
+                                }}
+                                className="pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-800 p-1"
+                                title="Delete student permanently"
+                              >
+                                <i className="fas fa-trash text-xs"></i>
+                              </button>
+                            )}
                           </div>
                         );
                       })}
@@ -608,14 +688,27 @@ const Admin: React.FC = () => {
                           className="px-3 py-1 text-[10px] font-black uppercase bg-transparent border-none outline-none text-black w-32"
                         />
                       ) : (
-                        <span
-                          className={`px-3 py-1 text-[10px] font-black uppercase cursor-pointer ${state.currentWeekTheme === theme.name ? 'text-black' : 'text-gray-600'}`}
-                          onClick={() => selectActiveTheme(theme.name)}
-                          onDoubleClick={() => startEditingTheme(theme.name)}
-                          title="Double-click to edit"
-                        >
-                          {theme.name}
-                        </span>
+                        <>
+                          <span
+                            className={`px-3 py-1 text-[10px] font-black uppercase cursor-pointer ${state.currentWeekTheme === theme.name ? 'text-black' : 'text-gray-600'}`}
+                            onClick={() => selectActiveTheme(theme.name)}
+                            onDoubleClick={() => startEditingTheme(theme.name)}
+                            title="Double-click to edit"
+                          >
+                            {theme.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteTheme(theme.name);
+                            }}
+                            className={`px-2 py-1 opacity-0 group-hover/theme:opacity-100 transition-opacity text-red-600 hover:text-red-800 ${state.currentWeekTheme === theme.name ? 'hover:bg-red-100' : 'hover:bg-white'}`}
+                            title="Delete theme permanently"
+                          >
+                            <i className="fas fa-trash text-[9px]"></i>
+                          </button>
+                        </>
                       )}
                     </div>
                   ))}

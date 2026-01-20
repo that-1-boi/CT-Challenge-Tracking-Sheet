@@ -553,6 +553,112 @@ export const getAllStudentsFromDB = async (): Promise<Student[]> => {
 };
 
 // =============================================================================
+// DELETE FUNCTIONS
+// =============================================================================
+
+export const deleteStudent = async (studentId: string): Promise<void> => {
+  try {
+    console.log(`🗑️  Deleting student ${studentId}...`);
+
+    // Delete student progress records
+    const { error: progressError } = await supabase
+      .from('student_progress')
+      .delete()
+      .eq('student_id', studentId);
+
+    if (progressError) {
+      console.error('Error deleting student progress:', progressError);
+      throw progressError;
+    }
+
+    // Delete student assignments
+    const { error: assignmentsError } = await supabase
+      .from('student_assignments')
+      .delete()
+      .eq('student_id', studentId);
+
+    if (assignmentsError) {
+      console.error('Error deleting student assignments:', assignmentsError);
+      throw assignmentsError;
+    }
+
+    // Delete the student
+    const { error: studentError } = await supabase
+      .from('students')
+      .delete()
+      .eq('id', studentId);
+
+    if (studentError) {
+      console.error('Error deleting student:', studentError);
+      throw studentError;
+    }
+
+    console.log(`✅ Student ${studentId} deleted successfully`);
+  } catch (error) {
+    console.error('Fatal error deleting student:', error);
+    throw error;
+  }
+};
+
+export const deleteTheme = async (themeName: string): Promise<void> => {
+  try {
+    console.log(`🗑️  Deleting theme ${themeName}...`);
+
+    // Get theme ID
+    const { data: themeData, error: themeError } = await supabase
+      .from('themes')
+      .select('id')
+      .eq('name', themeName)
+      .single();
+
+    if (themeError || !themeData) {
+      console.error('Error finding theme:', themeError);
+      throw themeError || new Error('Theme not found');
+    }
+
+    const themeId = themeData.id;
+
+    // Delete student progress for this theme
+    const { error: progressError } = await supabase
+      .from('student_progress')
+      .delete()
+      .eq('theme_id', themeId);
+
+    if (progressError) {
+      console.error('Error deleting theme progress:', progressError);
+      throw progressError;
+    }
+
+    // Delete student assignments for this theme
+    const { error: assignmentsError } = await supabase
+      .from('student_assignments')
+      .delete()
+      .eq('theme_id', themeId);
+
+    if (assignmentsError) {
+      console.error('Error deleting theme assignments:', assignmentsError);
+      throw assignmentsError;
+    }
+
+    // Delete the theme
+    const { error: deleteError } = await supabase
+      .from('themes')
+      .delete()
+      .eq('id', themeId);
+
+    if (deleteError) {
+      console.error('Error deleting theme:', deleteError);
+      throw deleteError;
+    }
+
+    console.log(`✅ Theme ${themeName} deleted successfully`);
+  } catch (error) {
+    console.error('Fatal error deleting theme:', error);
+    throw error;
+  }
+};
+
+// =============================================================================
 // DEFAULT STATE
 // =============================================================================
 
