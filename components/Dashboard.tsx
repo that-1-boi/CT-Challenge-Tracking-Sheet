@@ -210,8 +210,8 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="w-full max-w-full animate-in fade-in duration-500 overflow-hidden">
-      {/* Header - compact on mobile */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-4 sm:mb-8 gap-2 sm:gap-4">
+      {/* Header - compact on mobile and landscape phone */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-2 landscape-phone:mb-2 sm:mb-8 gap-1 landscape-phone:gap-1 sm:gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
             {/* Save Status Indicator */}
@@ -283,23 +283,23 @@ const Dashboard: React.FC = () => {
 
       {/* Table container - responsive sizing */}
       <div className="bg-white shadow-xl rounded-sm overflow-hidden border border-slate-100">
-        <div className="w-full overflow-x-auto portrait:overflow-y-auto portrait:max-h-[60vh]">
-          <table className="w-full border-collapse table-fixed min-w-[320px]">
+        <div className="w-full overflow-x-auto portrait:overflow-y-auto portrait:max-h-[60vh] landscape-phone:overflow-y-auto landscape-phone:max-h-[75vh]">
+          <table className="w-full border-collapse table-fixed min-w-[280px]">
             <thead>
               <tr className="bg-[#f4c514] text-black">
-                <th className="p-1.5 sm:p-3 md:p-4 text-left w-[20%] min-w-[60px] border-r border-black/10">
-                  <span className="text-[8px] sm:text-[10px] uppercase font-black tracking-widest text-black">Student</span>
+                <th className="p-1 landscape-phone:p-0.5 sm:p-3 md:p-4 text-left w-[22%] min-w-[50px] border-r border-black/10">
+                  <span className="text-[7px] landscape-phone:text-[7px] sm:text-[10px] uppercase font-black tracking-wider text-black">Student</span>
                 </th>
                 {activeTheme.challenges.map((chName, i) => (
-                  <th key={i} className="p-1 sm:p-3 md:p-4 border-r border-black/10 text-center w-[13%]">
+                  <th key={i} className="p-0.5 landscape-phone:p-0.5 sm:p-3 md:p-4 border-r border-black/10 text-center w-[13%]">
                     <div className="flex flex-col items-center">
-                      <span className="text-black font-black text-[10px] sm:text-xs uppercase tracking-tighter">C{i + 1}</span>
-                      <span className="text-[8px] sm:text-[10px] text-black/80 font-bold uppercase truncate max-w-[40px] sm:max-w-[100px] leading-tight hidden sm:block">{chName}</span>
+                      <span className="text-black font-black text-[8px] landscape-phone:text-[8px] sm:text-xs uppercase tracking-tighter">C{i + 1}</span>
+                      <span className="text-[7px] sm:text-[10px] text-black/80 font-bold uppercase truncate max-w-[30px] sm:max-w-[100px] leading-tight hidden sm:block landscape-phone:hidden">{chName}</span>
                     </div>
                   </th>
                 ))}
-                <th className="p-1 sm:p-3 md:p-4 text-center w-[12%] min-w-[40px]">
-                  <span className="text-[7px] sm:text-[8px] uppercase font-black tracking-widest text-black">%</span>
+                <th className="p-0.5 landscape-phone:p-0.5 sm:p-3 md:p-4 text-center w-[9%] min-w-[28px]">
+                  <span className="text-[6px] landscape-phone:text-[7px] sm:text-[8px] uppercase font-black tracking-widest text-black">%</span>
                 </th>
               </tr>
             </thead>
@@ -321,8 +321,8 @@ const Dashboard: React.FC = () => {
 
                   return (
                     <tr key={student.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50/50 group">
-                      <td className="p-1 sm:p-2 md:p-3 border-r border-slate-100">
-                        <div className="text-[10px] sm:text-sm md:text-base font-black text-black uppercase tracking-tight truncate">
+                      <td className="p-0.5 landscape-phone:p-0.5 sm:p-2 md:p-3 border-r border-slate-100">
+                        <div className="text-[8px] landscape-phone:text-[7px] sm:text-sm md:text-base font-black text-black uppercase tracking-tight truncate max-w-[60px] sm:max-w-none">
                           {student.name}
                         </div>
                       </td>
@@ -332,24 +332,24 @@ const Dashboard: React.FC = () => {
                         return (
                           <td
                             key={idx}
-                            className="p-0.5 sm:p-1 md:p-2 border-r border-slate-100 text-center cursor-pointer relative overflow-hidden"
+                            className="p-0 landscape-phone:p-0 sm:p-1 md:p-2 border-r border-slate-100 text-center cursor-pointer relative overflow-hidden"
                             onClick={() => toggleChallenge(student.name, idx)}
                           >
                             <div className="flex items-center justify-center relative z-10">
                               {isDone ? (
-                                <div className="w-5 h-5 sm:w-7 sm:h-7 md:w-8 md:h-8 bg-[#f4c514] rounded-full flex items-center justify-center shadow-sm animate-in zoom-in duration-300">
-                                  <i className="fas fa-check text-black text-[10px] sm:text-sm md:text-base"></i>
+                                <div className="w-4 h-4 landscape-phone:w-4 landscape-phone:h-4 sm:w-7 sm:h-7 md:w-8 md:h-8 bg-[#f4c514] rounded-full flex items-center justify-center shadow-sm animate-in zoom-in duration-300">
+                                  <i className="fas fa-check text-black text-[8px] landscape-phone:text-[8px] sm:text-sm md:text-base"></i>
                                 </div>
                               ) : (
-                                <div className="w-5 h-5 sm:w-7 sm:h-7 md:w-8 md:h-8 border border-slate-200 rounded-full group-hover:border-[#f4c514]/30 transition-colors"></div>
+                                <div className="w-4 h-4 landscape-phone:w-4 landscape-phone:h-4 sm:w-7 sm:h-7 md:w-8 md:h-8 border border-slate-200 rounded-full group-hover:border-[#f4c514]/30 transition-colors"></div>
                               )}
                             </div>
                           </td>
                         );
                       })}
-                      <td className="p-1 sm:p-2 md:p-3 text-center bg-slate-50/50 font-black text-black text-[9px] sm:text-[10px]">
+                      <td className="p-0.5 landscape-phone:p-0.5 sm:p-2 md:p-3 text-center bg-slate-50/50 font-black text-black text-[8px] landscape-phone:text-[7px] sm:text-[10px]">
                         {Math.round(percent)}%
-                        <div className="text-[7px] sm:text-[8px] text-gray-400 font-normal hidden sm:block">{completedCount}/5</div>
+                        <div className="text-[6px] sm:text-[8px] text-gray-400 font-normal hidden sm:block landscape-phone:hidden">{completedCount}/5</div>
                       </td>
                     </tr>
                   );
