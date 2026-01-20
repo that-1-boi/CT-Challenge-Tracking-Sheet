@@ -28,7 +28,6 @@ CREATE UNIQUE INDEX idx_students_name_lower ON students(LOWER(name));
 CREATE TABLE themes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
-  is_active BOOLEAN NOT NULL DEFAULT false,
   challenge_1 TEXT NOT NULL DEFAULT 'Challenge 1',
   challenge_2 TEXT NOT NULL DEFAULT 'Challenge 2',
   challenge_3 TEXT NOT NULL DEFAULT 'Challenge 3',

@@ -1,10 +1,1 @@
-export {
-  loadState,
-  saveState,
-  loadHistory,
-  saveHistory,
-  getAllStudentsFromDB,
-  deleteStudent,
-  deleteTheme,
-  ensureProgressForActiveThemes
-} from './supabaseService';
+export { loadState, saveState, loadHistory, saveHistory, getAllStudentsFromDB } from './supabaseService';

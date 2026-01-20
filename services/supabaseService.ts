@@ -16,7 +16,6 @@ interface StudentRow {
 interface ThemeRow {
   id: string;
   name: string;
-  is_active: boolean;
   challenge_1: string;
   challenge_2: string;
   challenge_3: string;
@@ -179,7 +178,6 @@ export const loadState = async (): Promise<AppState> => {
 
       return {
         name: themeRow.name,
-        isActive: themeRow.is_active,
         challenges: [
           themeRow.challenge_1,
           themeRow.challenge_2,
@@ -275,7 +273,6 @@ export const saveState = async (state: AppState): Promise<void> => {
     for (const theme of state.themes) {
       const themeData: any = {
         name: theme.name,
-        is_active: theme.isActive || false,
         challenge_1: theme.challenges[0] || 'Challenge 1',
         challenge_2: theme.challenges[1] || 'Challenge 2',
         challenge_3: theme.challenges[2] || 'Challenge 3',
@@ -552,152 +549,6 @@ export const getAllStudentsFromDB = async (): Promise<Student[]> => {
   } catch (error) {
     console.error('✗ Error loading all students:', error);
     return [];
-  }
-};
-
-// =============================================================================
-// DELETE FUNCTIONS
-// =============================================================================
-
-export const deleteStudent = async (studentId: string): Promise<void> => {
-  try {
-    console.log(`🗑️ Deleting student ${studentId}...`);
-
-    // Delete student progress first (cascading delete should handle this, but being explicit)
-    await supabase.from('student_progress').delete().eq('student_id', studentId);
-
-    // Delete student assignments
-    await supabase.from('student_assignments').delete().eq('student_id', studentId);
-
-    // Delete the student
-    const { error } = await supabase.from('students').delete().eq('id', studentId);
-
-    if (error) {
-      console.error('✗ Error deleting student:', error);
-      throw error;
-    }
-
-    console.log('✅ Student deleted successfully');
-  } catch (error) {
-    console.error('✗ Fatal error deleting student:', error);
-    throw error;
-  }
-};
-
-export const deleteTheme = async (themeName: string): Promise<void> => {
-  try {
-    console.log(`🗑️ Deleting theme ${themeName}...`);
-
-    // Get theme ID
-    const { data: themeData } = await supabase
-      .from('themes')
-      .select('id')
-      .eq('name', themeName)
-      .single();
-
-    if (!themeData) {
-      console.warn('⚠️ Theme not found');
-      return;
-    }
-
-    const themeId = themeData.id;
-
-    // Delete progress for this theme
-    await supabase.from('student_progress').delete().eq('theme_id', themeId);
-
-    // Delete assignments for this theme
-    await supabase.from('student_assignments').delete().eq('theme_id', themeId);
-
-    // Delete the theme
-    const { error } = await supabase.from('themes').delete().eq('id', themeId);
-
-    if (error) {
-      console.error('✗ Error deleting theme:', error);
-      throw error;
-    }
-
-    console.log('✅ Theme deleted successfully');
-  } catch (error) {
-    console.error('✗ Fatal error deleting theme:', error);
-    throw error;
-  }
-};
-
-// =============================================================================
-// AUTO-CREATE PROGRESS FOR ACTIVE THEMES
-// =============================================================================
-
-export const ensureProgressForActiveThemes = async (state: AppState): Promise<void> => {
-  try {
-    console.log('🔄 Ensuring progress entries for active themes...');
-
-    // Get theme ID map
-    const { data: themesData } = await supabase.from('themes').select('id, name, is_active');
-    if (!themesData) return;
-
-    const themeIdMap = new Map<string, string>();
-    const activeThemeIds = new Set<string>();
-
-    themesData.forEach((t: any) => {
-      themeIdMap.set(t.name, t.id);
-      if (t.is_active) {
-        activeThemeIds.add(t.id);
-      }
-    });
-
-    // For each active theme, ensure all assigned students have progress entries
-    for (const theme of state.themes) {
-      if (!theme.isActive) continue;
-
-      const themeId = themeIdMap.get(theme.name);
-      if (!themeId) continue;
-
-      console.log(`  📝 Processing active theme: ${theme.name}`);
-
-      // Get all students assigned to non-unassigned classes in this theme
-      for (const classSession of theme.classes) {
-        if (classSession.id === 'unassigned') continue;
-
-        for (const student of classSession.students) {
-          // Check if progress entry exists
-          const { data: existingProgress } = await supabase
-            .from('student_progress')
-            .select('id')
-            .eq('student_id', student.id)
-            .eq('theme_id', themeId)
-            .single();
-
-          if (!existingProgress) {
-            // Create progress entry with all challenges uncompleted
-            const progressData = {
-              student_id: student.id,
-              theme_id: themeId,
-              class_session_id: classSession.id,
-              challenge_1_completed: false,
-              challenge_2_completed: false,
-              challenge_3_completed: false,
-              challenge_4_completed: false,
-              challenge_5_completed: false,
-              last_updated: new Date().toISOString(),
-            };
-
-            const { error } = await supabase
-              .from('student_progress')
-              .insert(progressData);
-
-            if (error) {
-              console.error(`  ✗ Error creating progress for ${student.name}:`, error);
-            } else {
-              console.log(`  ✓ Created progress entry for ${student.name}`);
-            }
-          }
-        }
-      }
-    }
-
-    console.log('✅ Progress entries ensured');
-  } catch (error) {
-    console.error('✗ Error ensuring progress entries:', error);
   }
 };
 
