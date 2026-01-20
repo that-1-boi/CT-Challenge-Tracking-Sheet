@@ -120,40 +120,56 @@ const Dashboard: React.FC = () => {
       newChallenges: updatedChallenges
     });
 
-    // Immediately save to database (don't wait for debounced auto-save)
-    await updateStudentProgress(
-      currentClass.id,
-      student.id,
-      state.currentWeekTheme,
-      updatedChallenges
-    );
+    // Set saving status
+    setSaveStatus('saving');
 
-    // Update state.progress for UI reactivity
-    const progressKey = `${currentClass.id}_${student.id}_${state.currentWeekTheme}`;
-    setState(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        progress: {
-          ...prev.progress,
-          [progressKey]: {
-            studentId: student.id,
-            studentName: studentName,
-            challengesCompleted: updatedChallenges,
-            timestamp: Date.now(),
+    try {
+      // Immediately save to database (don't wait for debounced auto-save)
+      await updateStudentProgress(
+        currentClass.id,
+        student.id,
+        state.currentWeekTheme,
+        updatedChallenges
+      );
+
+      // Update state.progress for UI reactivity
+      const progressKey = `${currentClass.id}_${student.id}_${state.currentWeekTheme}`;
+      setState(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          progress: {
+            ...prev.progress,
+            [progressKey]: {
+              studentId: student.id,
+              studentName: studentName,
+              challengesCompleted: updatedChallenges,
+              timestamp: Date.now(),
+            }
           }
-        }
-      };
-    });
-
-    // Refresh history after a short delay to show updated progress
-    setTimeout(() => {
-      loadHistory().then(refreshedHistory => {
-        setHistory(refreshedHistory);
-      }).catch(error => {
-        console.error('Dashboard: Error refreshing history:', error);
+        };
       });
-    }, 500);
+
+      // Set saved status
+      setSaveStatus('saved');
+
+      // Refresh history after a short delay to show updated progress
+      setTimeout(() => {
+        loadHistory().then(refreshedHistory => {
+          setHistory(refreshedHistory);
+        }).catch(error => {
+          console.error('Dashboard: Error refreshing history:', error);
+        });
+      }, 500);
+    } catch (error) {
+      console.error('Dashboard: Error saving progress:', error);
+      setSaveStatus('error');
+
+      // Reset error status after 3 seconds
+      setTimeout(() => {
+        setSaveStatus('saved');
+      }, 3000);
+    }
   };
 
   if (loading) {
@@ -184,9 +200,26 @@ const Dashboard: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
         <div>
           <div className="flex items-center gap-3 mb-1">
+            {/* Save Status Indicator */}
             <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-              <span className="bg-black text-[#f4c514] text-[8px] font-black px-1.5 py-0.5 rounded-sm tracking-widest uppercase">Sync Active</span>
+              {saveStatus === 'saving' && (
+                <>
+                  <div className="w-1.5 h-1.5 border border-[#f4c514] border-t-transparent rounded-full animate-spin"></div>
+                  <span className="bg-black text-[#f4c514] text-[8px] font-black px-1.5 py-0.5 rounded-sm tracking-widest uppercase">Saving...</span>
+                </>
+              )}
+              {saveStatus === 'saved' && (
+                <>
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                  <span className="bg-green-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-sm tracking-widest uppercase">All Changes Saved</span>
+                </>
+              )}
+              {saveStatus === 'error' && (
+                <>
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                  <span className="bg-red-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-sm tracking-widest uppercase">Save Error</span>
+                </>
+              )}
             </div>
             <select
               value={currentClass.id}

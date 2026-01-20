@@ -899,15 +899,7 @@ export const updateStudentProgress = async (
   challengesCompleted: string[]
 ): Promise<void> => {
   try {
-    // Convert challenge IDs (c1, c2, etc.) to boolean columns
-    const progressUpdate = {
-      c1: challengesCompleted.includes('c1'),
-      c2: challengesCompleted.includes('c2'),
-      c3: challengesCompleted.includes('c3'),
-      c4: challengesCompleted.includes('c4'),
-      c5: challengesCompleted.includes('c5'),
-      last_updated: new Date().toISOString()
-    };
+    console.log('Dashboard: Saving progress immediately...', { studentId, themeName, challengesCompleted });
 
     // Get theme_id from theme name
     const { data: themeData, error: themeError } = await supabase
@@ -917,27 +909,39 @@ export const updateStudentProgress = async (
       .single();
 
     if (themeError || !themeData) {
-      console.error('Error fetching theme:', themeError);
-      return;
+      console.error('Dashboard: Error fetching theme:', themeError);
+      throw new Error('Failed to fetch theme');
     }
 
-    // Upsert progress record
+    // Convert challenge IDs (c1, c2, etc.) to boolean columns with correct column names
+    const progressData = {
+      student_id: studentId,
+      theme_id: themeData.id,
+      class_session_id: classId,
+      challenge_1_completed: challengesCompleted.includes('c1'),
+      challenge_2_completed: challengesCompleted.includes('c2'),
+      challenge_3_completed: challengesCompleted.includes('c3'),
+      challenge_4_completed: challengesCompleted.includes('c4'),
+      challenge_5_completed: challengesCompleted.includes('c5'),
+      last_updated: new Date().toISOString()
+    };
+
+    // Upsert progress record with correct conflict key (student_id,theme_id only)
     const { error } = await supabase
       .from('student_progress')
-      .upsert({
-        student_id: studentId,
-        theme_id: themeData.id,
-        class_session_id: classId,
-        ...progressUpdate
-      }, {
-        onConflict: 'student_id,theme_id,class_session_id'
+      .upsert(progressData, {
+        onConflict: 'student_id,theme_id'
       });
 
     if (error) {
-      console.error('Error updating student progress:', error);
+      console.error('Dashboard: Error updating student progress:', error);
+      throw error;
     }
+
+    console.log('Dashboard: Progress saved successfully');
   } catch (error) {
-    console.error('Fatal error updating student progress:', error);
+    console.error('Dashboard: Fatal error updating student progress:', error);
+    throw error;
   }
 };
 
