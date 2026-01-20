@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, Theme, Student } from '../types';
 import { loadState, saveState, getAllStudentsFromDB, deleteStudent, deleteTheme } from '../services/storageService';
-import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
+import { DEFAULT_CLASSES } from '../constants';
 
 const Admin: React.FC = () => {
   const [state, setState] = useState<AppState>({
-    themes: DEFAULT_THEMES,
-    currentWeekTheme: DEFAULT_THEMES[0].name,
-    publicThemeName: DEFAULT_THEMES[0].name,
+    themes: [],
+    currentWeekTheme: '',
+    publicThemeName: '',
     publicClassId: DEFAULT_CLASSES[0].id,
     progress: {},
     selectedClassId: DEFAULT_CLASSES[0].id,

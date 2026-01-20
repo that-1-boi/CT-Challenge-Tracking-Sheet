@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 import { AppState, Theme, ClassSession, Student, StudentProgress, HistoryEntry } from '../types';
-import { DEFAULT_CLASSES, DEFAULT_THEMES } from '../constants';
+import { DEFAULT_CLASSES } from '../constants';
 
 // =============================================================================
 // NEW DATABASE SCHEMA INTERFACES
@@ -229,7 +229,7 @@ export const loadState = async (): Promise<AppState> => {
     console.log(`✓ Built ${Object.keys(progress).length} progress entries`);
 
     // 7. Load app settings
-    const currentWeekThemeName = (await getAppSetting('current_week_theme_id')) || themes[0]?.name || DEFAULT_THEMES[0].name;
+    const currentWeekThemeName = (await getAppSetting('current_week_theme_id')) || themes[0]?.name || '';
     const publicThemeName = (await getAppSetting('public_theme_id')) || currentWeekThemeName;
     const publicClassId = (await getAppSetting('public_class_id')) || DEFAULT_CLASSES[0].id;
     const selectedClassId = (await getAppSetting('selected_class_id')) || DEFAULT_CLASSES[0].id;
@@ -664,9 +664,9 @@ export const deleteTheme = async (themeName: string): Promise<void> => {
 
 function getDefaultAppState(): AppState {
   return {
-    themes: DEFAULT_THEMES,
-    currentWeekTheme: DEFAULT_THEMES[0].name,
-    publicThemeName: DEFAULT_THEMES[0].name,
+    themes: [],
+    currentWeekTheme: '',
+    publicThemeName: '',
     publicClassId: DEFAULT_CLASSES[0].id,
     selectedClassId: DEFAULT_CLASSES[0].id,
     progress: {},
