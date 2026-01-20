@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AppState, HistoryEntry, StudentProgress, ThemeCategory } from '../types';
-import { loadState, saveState, loadHistory, updateStudentProgress, updateThemeCategory } from '../services/storageService';
+import { AppState, HistoryEntry, StudentProgress } from '../types';
+import { loadState, saveState, loadHistory, updateStudentProgress } from '../services/storageService';
 
 const Dashboard: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
@@ -74,39 +74,6 @@ const Dashboard: React.FC = () => {
   const activeTheme = state?.themes.find(t => t.name === state.currentWeekTheme);
   const realClasses = activeTheme?.classes.filter(c => c.id !== 'unassigned') || [];
   const currentClass = realClasses.find(c => c.id === state?.selectedClassId) || realClasses[0];
-
-  // Handle theme category change
-  const handleCategoryChange = async (category: ThemeCategory | null) => {
-    if (!state || !activeTheme) return;
-
-    setSaveStatus('saving');
-
-    try {
-      // Immediately save to database
-      await updateThemeCategory(activeTheme.name, category);
-
-      // Update local state
-      setState(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          themes: prev.themes.map(t =>
-            t.name === activeTheme.name
-              ? { ...t, category: category || undefined }
-              : t
-          )
-        };
-      });
-
-      // Skip auto-save since we just saved
-      skipNextAutoSave.current = true;
-      setSaveStatus('saved');
-    } catch (error) {
-      console.error('Error updating theme category:', error);
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('saved'), 3000);
-    }
-  };
 
   // Get progress for a student from state.progress
   // Search by student_id and theme only, ignoring class_session_id
@@ -300,34 +267,6 @@ const Dashboard: React.FC = () => {
               </span>
             </h1>
             <i className="fas fa-chevron-down text-[#f4c514] text-sm sm:text-xl group-hover:translate-y-1 transition-transform cursor-pointer"></i>
-          </div>
-          {/* Theme Category Toggle */}
-          <div className="flex items-center gap-1 sm:gap-2 mt-1 sm:mt-2">
-            <span className="text-[8px] sm:text-[10px] font-black uppercase text-gray-400 tracking-wider">Category:</span>
-            <div className="flex rounded-sm overflow-hidden border border-slate-200">
-              <button
-                onClick={() => handleCategoryChange('mechanical')}
-                className={`px-2 py-0.5 sm:px-3 sm:py-1 text-[8px] sm:text-[10px] font-black uppercase tracking-wider transition-colors ${
-                  activeTheme?.category === 'mechanical'
-                    ? 'bg-orange-500 text-white'
-                    : 'bg-white text-gray-500 hover:bg-orange-50'
-                }`}
-              >
-                <i className="fas fa-cog mr-1"></i>
-                Mechanical
-              </button>
-              <button
-                onClick={() => handleCategoryChange('programming')}
-                className={`px-2 py-0.5 sm:px-3 sm:py-1 text-[8px] sm:text-[10px] font-black uppercase tracking-wider transition-colors ${
-                  activeTheme?.category === 'programming'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-white text-gray-500 hover:bg-blue-50'
-                }`}
-              >
-                <i className="fas fa-code mr-1"></i>
-                Programming
-              </button>
-            </div>
           </div>
         </div>
 

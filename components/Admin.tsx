@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AppState, Theme, Student } from '../types';
-import { loadState, saveState, getAllStudentsFromDB, deleteStudent, deleteTheme } from '../services/storageService';
+import { AppState, Theme, Student, ThemeCategory } from '../types';
+import { loadState, saveState, getAllStudentsFromDB, deleteStudent, deleteTheme, updateThemeCategory } from '../services/storageService';
 import { DEFAULT_CLASSES } from '../constants';
 
 const Admin: React.FC = () => {
@@ -229,6 +229,32 @@ const Admin: React.FC = () => {
 
   const setPublicTheme = (themeName: string) => {
     setState(prev => ({ ...prev, publicThemeName: themeName }));
+  };
+
+  // Handle theme category change
+  const handleCategoryChange = async (themeName: string, category: ThemeCategory) => {
+    setSaveStatus('Saving category...');
+
+    try {
+      // Immediately save to database
+      await updateThemeCategory(themeName, category);
+
+      // Update local state
+      setState(prev => ({
+        ...prev,
+        themes: prev.themes.map(t =>
+          t.name === themeName
+            ? { ...t, category }
+            : t
+        )
+      }));
+
+      setSaveStatus('All changes saved');
+    } catch (error) {
+      console.error('Error updating theme category:', error);
+      setSaveStatus('Error saving category');
+      setTimeout(() => setSaveStatus('All changes saved'), 3000);
+    }
   };
 
   const createNewTheme = async () => {
@@ -834,7 +860,39 @@ const Admin: React.FC = () => {
 
               {activeTheme && (
                 <div className="space-y-3 pt-6 border-t border-black/5">
-                  <h3 className="text-sm font-black uppercase italic text-black">Challenges: {activeTheme.name}</h3>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h3 className="text-sm font-black uppercase italic text-black">Challenges: {activeTheme.name}</h3>
+                    {/* Theme Category Toggle */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-black uppercase text-gray-500 tracking-wider">Category:</span>
+                      <div className="flex rounded-sm overflow-hidden border border-black/20">
+                        <button
+                          type="button"
+                          onClick={() => handleCategoryChange(activeTheme.name, 'mechanical')}
+                          className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider transition-colors ${
+                            activeTheme.category === 'mechanical'
+                              ? 'bg-orange-500 text-white'
+                              : 'bg-white text-gray-500 hover:bg-orange-50'
+                          }`}
+                        >
+                          <i className="fas fa-cog mr-1"></i>
+                          Mechanical
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCategoryChange(activeTheme.name, 'programming')}
+                          className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider transition-colors ${
+                            activeTheme.category === 'programming'
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-white text-gray-500 hover:bg-blue-50'
+                          }`}
+                        >
+                          <i className="fas fa-code mr-1"></i>
+                          Programming
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 gap-2">
                     {activeTheme.challenges.map((chName, idx) => {
                       const hasImage = activeTheme.challengeImages && activeTheme.challengeImages[idx];
