@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AppState, HistoryEntry } from '../types';
+import { AppState, HistoryEntry, StudentProgress } from '../types';
 import { loadState, saveState, loadHistory } from '../services/storageService';
 
 const LivePublicView: React.FC = () => {
@@ -72,6 +72,7 @@ const LivePublicView: React.FC = () => {
   };
 
   // Get progress for a student from state.progress
+  // Search by student_id and theme only, ignoring class_session_id
   const getStudentProgress = (studentName: string, className: string, themeName: string) => {
     if (!state) return { challenges: [], timestamp: 0 };
 
@@ -84,14 +85,24 @@ const LivePublicView: React.FC = () => {
     const student = classSession.students.find(s => s.name === studentName);
     if (!student) return { challenges: [], timestamp: 0 };
 
-    const progressKey = `${classSession.id}_${student.id}_${themeName}`;
-    const stateProgress = state.progress[progressKey];
+    // Search for any progress key matching pattern: *_studentId_themeName
+    // This handles cases where student was moved between classes
+    const progressEntry = Object.entries(state.progress).find(([key]) => {
+      const parts = key.split('_');
+      if (parts.length < 3) return false;
+      const studentId = parts[1];
+      const themeNameFromKey = parts.slice(2).join('_');
+      return studentId === student.id && themeNameFromKey === themeName;
+    });
 
-    if (stateProgress && stateProgress.challengesCompleted) {
-      return {
-        challenges: stateProgress.challengesCompleted,
-        timestamp: stateProgress.timestamp || 0
-      };
+    if (progressEntry) {
+      const progressData = progressEntry[1] as StudentProgress;
+      if (progressData && progressData.challengesCompleted) {
+        return {
+          challenges: progressData.challengesCompleted,
+          timestamp: progressData.timestamp || 0
+        };
+      }
     }
 
     // Return empty progress if no data exists
