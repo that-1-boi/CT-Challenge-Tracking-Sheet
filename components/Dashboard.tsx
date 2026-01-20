@@ -9,6 +9,7 @@ const Dashboard: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const isInitialLoad = useRef(true);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const skipNextAutoSave = useRef(false); // Skip auto-save after immediate progress save
 
   // Load state and history from database on mount
   useEffect(() => {
@@ -37,8 +38,16 @@ const Dashboard: React.FC = () => {
   }, []);
 
   // Save state to database when it changes (debounced)
+  // Skip auto-save when we've just done an immediate progress save to avoid race conditions
   useEffect(() => {
     if (isInitialLoad.current || !state) {
+      return;
+    }
+
+    // Skip this auto-save if we just did an immediate save
+    if (skipNextAutoSave.current) {
+      console.log('Dashboard: Skipping auto-save (immediate save already done)');
+      skipNextAutoSave.current = false;
       return;
     }
 
@@ -131,6 +140,10 @@ const Dashboard: React.FC = () => {
         state.currentWeekTheme,
         updatedChallenges
       );
+
+      // Skip the next auto-save since we just saved immediately
+      // This prevents race conditions where debounced save could overwrite
+      skipNextAutoSave.current = true;
 
       // Update state.progress for UI reactivity
       const progressKey = `${currentClass.id}_${student.id}_${state.currentWeekTheme}`;
