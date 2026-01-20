@@ -384,6 +384,28 @@ export const saveState = async (state: AppState): Promise<void> => {
       }
     }
 
+    // 3b. DELETE PROGRESS FOR STUDENTS MOVED TO UNASSIGNED
+    // If a student is moved to unassigned, remove their progress records
+    console.log('  🗑️  Cleaning up progress for unassigned students...');
+    let progressDeleted = 0;
+
+    const unassignedStudents = currentAssignments.filter(a => a.class_session_id === 'unassigned');
+    for (const assignment of unassignedStudents) {
+      const { error } = await supabase
+        .from('student_progress')
+        .delete()
+        .eq('student_id', assignment.student_id)
+        .eq('theme_id', assignment.theme_id);
+
+      if (!error) {
+        progressDeleted++;
+      }
+    }
+
+    if (progressDeleted > 0) {
+      console.log(`  ✓ Deleted ${progressDeleted} progress records for unassigned students`);
+    }
+
     // 4. SAVE STUDENT PROGRESS
     console.log('  ✅ Saving progress...');
     let progressSaved = 0;
@@ -436,10 +458,16 @@ export const saveState = async (state: AppState): Promise<void> => {
     console.log(`  ✓ Progress: ${progressSaved} saved, ${progressErrors} errors`);
 
     // 4b. ENSURE ALL ASSIGNED STUDENTS HAVE PROGRESS RECORDS (even if empty)
+    // Skip students in "unassigned" - they shouldn't have progress records
     console.log('  📝 Ensuring all assigned students have progress records...');
     let progressInitialized = 0;
 
     for (const assignment of currentAssignments) {
+      // Skip unassigned students - they shouldn't appear in history/search
+      if (assignment.class_session_id === 'unassigned') {
+        continue;
+      }
+
       // Check if progress already exists for this student-theme combination
       const existingProgress = Object.entries(state.progress).find(([key]) => {
         const parts = key.split('_');
