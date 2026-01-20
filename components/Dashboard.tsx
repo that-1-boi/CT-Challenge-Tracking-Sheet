@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, HistoryEntry, StudentProgress } from '../types';
-import { loadState, saveState, loadHistory } from '../services/storageService';
+import { loadState, saveState, loadHistory, updateStudentProgress } from '../services/storageService';
 
 const Dashboard: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
@@ -98,7 +98,7 @@ const Dashboard: React.FC = () => {
     return { challenges: [], timestamp: 0 };
   };
 
-  const toggleChallenge = (studentName: string, challengeIdx: number) => {
+  const toggleChallenge = async (studentName: string, challengeIdx: number) => {
     if (!currentClass || !state || !activeTheme) return;
 
     const challengeId = `c${challengeIdx + 1}`;
@@ -120,7 +120,15 @@ const Dashboard: React.FC = () => {
       newChallenges: updatedChallenges
     });
 
-    // Update state.progress - this will auto-save to database
+    // Immediately save to database (don't wait for debounced auto-save)
+    await updateStudentProgress(
+      currentClass.id,
+      student.id,
+      state.currentWeekTheme,
+      updatedChallenges
+    );
+
+    // Update state.progress for UI reactivity
     const progressKey = `${currentClass.id}_${student.id}_${state.currentWeekTheme}`;
     setState(prev => {
       if (!prev) return prev;
@@ -145,7 +153,7 @@ const Dashboard: React.FC = () => {
       }).catch(error => {
         console.error('Dashboard: Error refreshing history:', error);
       });
-    }, 1000);
+    }, 500);
   };
 
   if (loading) {

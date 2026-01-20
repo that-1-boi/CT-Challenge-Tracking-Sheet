@@ -889,6 +889,59 @@ export const updatePublicSettings = async (
 };
 
 // =============================================================================
+// UPDATE STUDENT PROGRESS (IMMEDIATE SAVE)
+// =============================================================================
+
+export const updateStudentProgress = async (
+  classId: string,
+  studentId: string,
+  themeName: string,
+  challengesCompleted: string[]
+): Promise<void> => {
+  try {
+    // Convert challenge IDs (c1, c2, etc.) to boolean columns
+    const progressUpdate = {
+      c1: challengesCompleted.includes('c1'),
+      c2: challengesCompleted.includes('c2'),
+      c3: challengesCompleted.includes('c3'),
+      c4: challengesCompleted.includes('c4'),
+      c5: challengesCompleted.includes('c5'),
+      last_updated: new Date().toISOString()
+    };
+
+    // Get theme_id from theme name
+    const { data: themeData, error: themeError } = await supabase
+      .from('themes')
+      .select('id')
+      .eq('name', themeName)
+      .single();
+
+    if (themeError || !themeData) {
+      console.error('Error fetching theme:', themeError);
+      return;
+    }
+
+    // Upsert progress record
+    const { error } = await supabase
+      .from('student_progress')
+      .upsert({
+        student_id: studentId,
+        theme_id: themeData.id,
+        class_session_id: classId,
+        ...progressUpdate
+      }, {
+        onConflict: 'student_id,theme_id,class_session_id'
+      });
+
+    if (error) {
+      console.error('Error updating student progress:', error);
+    }
+  } catch (error) {
+    console.error('Fatal error updating student progress:', error);
+  }
+};
+
+// =============================================================================
 // GET ALL STUDENTS FROM DATABASE
 // =============================================================================
 
