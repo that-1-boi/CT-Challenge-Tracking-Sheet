@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { AppState, Theme, ClassSession, Student, StudentProgress, HistoryEntry } from '../types';
+import { AppState, Theme, ClassSession, Student, StudentProgress, HistoryEntry, ThemeCategory } from '../types';
 import { DEFAULT_CLASSES } from '../constants';
 
 // =============================================================================
@@ -26,6 +26,7 @@ interface ThemeRow {
   challenge_3_image?: string | null;
   challenge_4_image?: string | null;
   challenge_5_image?: string | null;
+  category?: string | null; // 'mechanical' or 'programming'
   created_at?: string;
   updated_at?: string;
 }
@@ -187,6 +188,7 @@ export const loadState = async (): Promise<AppState> => {
         ],
         challengeImages: ['', '', '', '', ''], // Lazy loaded on-demand
         classes,
+        category: (themeRow.category as ThemeCategory) || undefined,
       };
     });
 
@@ -277,6 +279,7 @@ export const saveState = async (state: AppState): Promise<void> => {
         challenge_3_image: theme.challengeImages?.[2] || null,
         challenge_4_image: theme.challengeImages?.[3] || null,
         challenge_5_image: theme.challengeImages?.[4] || null,
+        category: theme.category || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -941,6 +944,37 @@ export const updateStudentProgress = async (
     console.log('Dashboard: Progress saved successfully');
   } catch (error) {
     console.error('Dashboard: Fatal error updating student progress:', error);
+    throw error;
+  }
+};
+
+// =============================================================================
+// UPDATE THEME CATEGORY
+// =============================================================================
+
+export const updateThemeCategory = async (
+  themeName: string,
+  category: ThemeCategory | null
+): Promise<void> => {
+  try {
+    console.log(`📝 Updating theme category: ${themeName} -> ${category}`);
+
+    const { error } = await supabase
+      .from('themes')
+      .update({
+        category: category,
+        updated_at: new Date().toISOString()
+      })
+      .eq('name', themeName);
+
+    if (error) {
+      console.error('Error updating theme category:', error);
+      throw error;
+    }
+
+    console.log(`✅ Theme category updated: ${themeName} -> ${category}`);
+  } catch (error) {
+    console.error('Fatal error updating theme category:', error);
     throw error;
   }
 };
