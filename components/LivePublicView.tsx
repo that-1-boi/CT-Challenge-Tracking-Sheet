@@ -71,38 +71,31 @@ const LivePublicView: React.FC = () => {
     }
   };
 
-  // Get progress for a student from history (most recent entry for today)
+  // Get progress for a student from state.progress
   const getStudentProgress = (studentName: string, className: string, themeName: string) => {
-    if (!history || history.length === 0) return { challenges: [], timestamp: 0 };
+    if (!state) return { challenges: [], timestamp: 0 };
 
-    const today = new Date().toISOString().split('T')[0];
+    const activeTheme = state.themes.find(t => t.name === themeName);
+    if (!activeTheme) return { challenges: [], timestamp: 0 };
 
-    // Find the most recent entry for this student, class, and theme from today
-    const studentEntries = history.filter(h =>
-      h.studentName === studentName &&
-      h.className === className &&
-      h.weekTheme === themeName &&
-      h.date.startsWith(today)
-    );
+    const classSession = activeTheme.classes.find(c => c.name === className);
+    if (!classSession) return { challenges: [], timestamp: 0 };
 
-    if (studentEntries.length === 0) return { challenges: [], timestamp: 0 };
+    const student = classSession.students.find(s => s.name === studentName);
+    if (!student) return { challenges: [], timestamp: 0 };
 
-    // Get the most recent entry
-    const mostRecent = studentEntries.sort((a, b) =>
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    )[0];
+    const progressKey = `${classSession.id}_${student.id}_${themeName}`;
+    const stateProgress = state.progress[progressKey];
 
-    // Convert challenge names back to IDs (c1, c2, etc.)
-    const activeTheme = state?.themes.find(t => t.name === themeName);
-    const challengeIds = mostRecent.challenges.map(challengeName => {
-      const idx = activeTheme?.challenges.indexOf(challengeName);
-      return idx !== -1 && idx !== undefined ? `c${idx + 1}` : null;
-    }).filter(Boolean) as string[];
+    if (stateProgress && stateProgress.challengesCompleted) {
+      return {
+        challenges: stateProgress.challengesCompleted,
+        timestamp: stateProgress.timestamp || 0
+      };
+    }
 
-    return {
-      challenges: challengeIds,
-      timestamp: new Date(mostRecent.date).getTime()
-    };
+    // Return empty progress if no data exists
+    return { challenges: [], timestamp: 0 };
   };
 
   if (loading || !state) {

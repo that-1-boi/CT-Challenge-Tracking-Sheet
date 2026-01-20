@@ -65,53 +65,25 @@ const Dashboard: React.FC = () => {
   const realClasses = activeTheme?.classes.filter(c => c.id !== 'unassigned') || [];
   const currentClass = realClasses.find(c => c.id === state?.selectedClassId) || realClasses[0];
 
-  // Get progress for a student from state.progress first, then fall back to history
+  // Get progress for a student from state.progress
   const getStudentProgress = (studentName: string, className: string, themeName: string) => {
-    // First try to get from state.progress (primary source)
-    if (state && currentClass) {
-      const student = currentClass.students.find(s => s.name === studentName);
-      if (student) {
-        const progressKey = `${currentClass.id}_${student.id}_${themeName}`;
-        const stateProgress = state.progress[progressKey];
-        if (stateProgress && stateProgress.challengesCompleted) {
-          return {
-            challenges: stateProgress.challengesCompleted,
-            timestamp: stateProgress.timestamp
-          };
-        }
-      }
+    if (!state || !currentClass) return { challenges: [], timestamp: 0 };
+
+    const student = currentClass.students.find(s => s.name === studentName);
+    if (!student) return { challenges: [], timestamp: 0 };
+
+    const progressKey = `${currentClass.id}_${student.id}_${themeName}`;
+    const stateProgress = state.progress[progressKey];
+
+    if (stateProgress && stateProgress.challengesCompleted) {
+      return {
+        challenges: stateProgress.challengesCompleted,
+        timestamp: stateProgress.timestamp || 0
+      };
     }
 
-    // Fallback to history (for legacy data or if state.progress is empty)
-    if (!history || history.length === 0) return { challenges: [], timestamp: 0 };
-
-    const today = new Date().toISOString().split('T')[0];
-
-    // Find the most recent entry for this student, class, and theme from today
-    const studentEntries = history.filter(h =>
-      h.studentName === studentName &&
-      h.className === className &&
-      h.weekTheme === themeName &&
-      h.date.startsWith(today)
-    );
-
-    if (studentEntries.length === 0) return { challenges: [], timestamp: 0 };
-
-    // Get the most recent entry
-    const mostRecent = studentEntries.sort((a, b) =>
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    )[0];
-
-    // Convert challenge names back to IDs (c1, c2, etc.)
-    const challengeIds = mostRecent.challenges.map(challengeName => {
-      const idx = activeTheme?.challenges.indexOf(challengeName);
-      return idx !== -1 && idx !== undefined ? `c${idx + 1}` : null;
-    }).filter(Boolean) as string[];
-
-    return {
-      challenges: challengeIds,
-      timestamp: new Date(mostRecent.date).getTime()
-    };
+    // Return empty progress if no data exists
+    return { challenges: [], timestamp: 0 };
   };
 
   const toggleChallenge = (studentName: string, challengeIdx: number) => {
