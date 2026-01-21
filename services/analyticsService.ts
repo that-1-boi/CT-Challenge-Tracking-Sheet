@@ -223,7 +223,7 @@ function calculateStudentThemeScore(
   allCompletionsInTheme: number[]
 ): StudentThemeScore {
   const { completionPercent, challengesCompleted, themeName, themeCategory } = studentEntry;
-  const { meanCompletion, standardDeviation: stdDev, difficultyWeight } = themeStats;
+  const { meanCompletion, medianCompletion, standardDeviation: stdDev, difficultyWeight } = themeStats;
 
   // Z-score calculation
   // If stdDev is 0 (everyone has same score), z-score is 0
@@ -250,6 +250,8 @@ function calculateStudentThemeScore(
     themeCategory,
     rawCompletion: completionPercent,
     challengesCompleted,
+    classMean: meanCompletion,
+    classMedian: medianCompletion,
     zScore,
     curvedScore,
     difficultyWeight,

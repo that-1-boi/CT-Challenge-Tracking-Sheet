@@ -71,6 +71,10 @@ export interface StudentThemeScore {
   rawCompletion: number; // 0-100
   challengesCompleted: number;
 
+  // Class statistics for this theme (for comparison)
+  classMean: number; // Mean completion % for all students in this theme
+  classMedian: number; // Median completion % for all students in this theme
+
   // Curved score calculation
   zScore: number; // (student - mean) / stddev, clamped to [-2, 2]
   curvedScore: number; // 50 + (zScore * 15), range ~20-80

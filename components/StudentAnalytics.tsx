@@ -3,11 +3,11 @@ import { generateAnalytics } from '../services/analyticsService';
 import {
   AnalyticsResult,
   StudentProfile,
-  ClassSummary,
   ThemeStatistics,
+  StudentThemeScore,
 } from '../services/analyticsTypes';
 
-type ViewMode = 'overview' | 'students' | 'classes' | 'themes';
+type ViewMode = 'overview' | 'students' | 'themes';
 
 const StudentAnalytics: React.FC = () => {
   const [analytics, setAnalytics] = useState<AnalyticsResult | null>(null);
@@ -15,7 +15,6 @@ const StudentAnalytics: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
   const [selectedStudent, setSelectedStudent] = useState<StudentProfile | null>(null);
-  const [selectedClass, setSelectedClass] = useState<ClassSummary | null>(null);
   const [search, setSearch] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
 
@@ -77,13 +76,12 @@ const StudentAnalytics: React.FC = () => {
 
       {/* View Mode Tabs */}
       <div className="flex flex-wrap gap-2">
-        {(['overview', 'students', 'classes', 'themes'] as ViewMode[]).map(mode => (
+        {(['overview', 'students', 'themes'] as ViewMode[]).map(mode => (
           <button
             key={mode}
             onClick={() => {
               setViewMode(mode);
               setSelectedStudent(null);
-              setSelectedClass(null);
             }}
             className={`px-4 py-2 text-[10px] font-black uppercase tracking-wider transition-all ${
               viewMode === mode
@@ -93,7 +91,6 @@ const StudentAnalytics: React.FC = () => {
           >
             {mode === 'overview' && <i className="fas fa-chart-pie mr-2"></i>}
             {mode === 'students' && <i className="fas fa-user-graduate mr-2"></i>}
-            {mode === 'classes' && <i className="fas fa-users mr-2"></i>}
             {mode === 'themes' && <i className="fas fa-tasks mr-2"></i>}
             {mode}
           </button>
@@ -179,42 +176,6 @@ const StudentAnalytics: React.FC = () => {
               <StudentProfileCard profile={selectedStudent} onClose={() => setSelectedStudent(null)} />
             ) : (
               <StudentDirectory profiles={filteredStudents} onSelect={setSelectedStudent} />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Classes View */}
-      {viewMode === 'classes' && (
-        <div className="flex flex-col lg:flex-row gap-8">
-          <div className="w-full lg:w-1/3 space-y-4">
-            <div className="bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0]">
-              {analytics.classSummaries.map(summary => (
-                <button
-                  key={summary.classId}
-                  onClick={() => setSelectedClass(summary)}
-                  className={`w-full text-left p-4 hover:bg-[#f4c514] transition-colors ${
-                    selectedClass?.classId === summary.classId ? 'bg-[#f4c514]' : ''
-                  }`}
-                >
-                  <div className="font-black uppercase text-sm">{summary.className}</div>
-                  <div className="text-[9px] text-gray-500 mt-1">
-                    {summary.totalStudents} students | Avg: {summary.averageOverallScore}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex-1">
-            {selectedClass ? (
-              <ClassSummaryCard summary={selectedClass} onClose={() => setSelectedClass(null)} />
-            ) : (
-              <div className="bg-[#f4c514] p-8 rounded-sm text-black border-l-[12px] border-black shadow-lg">
-                <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-2">Class Summaries</h2>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-70">
-                  Select a class to view detailed analytics
-                </p>
-              </div>
             )}
           </div>
         </div>
@@ -359,6 +320,237 @@ const StatCard: React.FC<{
 );
 
 // ============================================================================
+// LINE GRAPH COMPONENT (SVG-based)
+// ============================================================================
+
+const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ themeScores }) => {
+  if (themeScores.length === 0) {
+    return (
+      <div className="bg-slate-50 border border-slate-200 p-8 rounded-sm text-center">
+        <p className="text-[10px] text-gray-400 uppercase font-bold">No theme data available</p>
+      </div>
+    );
+  }
+
+  const width = 800;
+  const height = 300;
+  const padding = { top: 30, right: 30, bottom: 60, left: 50 };
+  const graphWidth = width - padding.left - padding.right;
+  const graphHeight = height - padding.top - padding.bottom;
+
+  // X-axis: theme index
+  const xScale = (index: number) => padding.left + (index / (themeScores.length - 1 || 1)) * graphWidth;
+
+  // Y-axis: 0-100 for raw data, class mean, class median; 20-80 for curved score
+  const yScaleRaw = (value: number) => padding.top + graphHeight - (value / 100) * graphHeight;
+  const yScaleCurved = (value: number) => {
+    // Map curved score (typically 20-80) to the same visual range
+    const normalized = (value - 20) / 60; // 0-1 range
+    return padding.top + graphHeight - normalized * graphHeight;
+  };
+
+  // Generate path data
+  const createLinePath = (values: number[], scale: (v: number) => number) => {
+    return values.map((v, i) => {
+      const x = xScale(i);
+      const y = scale(v);
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
+  };
+
+  const rawPath = createLinePath(themeScores.map(s => s.rawCompletion), yScaleRaw);
+  const meanPath = createLinePath(themeScores.map(s => s.classMean), yScaleRaw);
+  const medianPath = createLinePath(themeScores.map(s => s.classMedian), yScaleRaw);
+  const curvedPath = createLinePath(themeScores.map(s => s.curvedScore), yScaleCurved);
+
+  return (
+    <div className="bg-white border border-slate-200 p-4 rounded-sm">
+      <h3 className="text-xs font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic mb-4">
+        Performance Across Themes
+      </h3>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 mb-4 text-[9px] font-bold">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-0.5 bg-[#f4c514]"></div>
+          <span>Student Raw %</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-0.5 bg-gray-400" style={{ strokeDasharray: '4,4' }}></div>
+          <span>Class Mean</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-0.5 bg-blue-400"></div>
+          <span>Class Median</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-0.5 bg-green-500"></div>
+          <span>Curved Score</span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[600px]" style={{ maxHeight: '350px' }}>
+          {/* Grid lines */}
+          {[0, 25, 50, 75, 100].map(v => (
+            <g key={v}>
+              <line
+                x1={padding.left}
+                y1={yScaleRaw(v)}
+                x2={width - padding.right}
+                y2={yScaleRaw(v)}
+                stroke="#e5e7eb"
+                strokeWidth="1"
+              />
+              <text
+                x={padding.left - 8}
+                y={yScaleRaw(v) + 4}
+                textAnchor="end"
+                className="text-[10px] fill-gray-400"
+              >
+                {v}%
+              </text>
+            </g>
+          ))}
+
+          {/* Class Mean line (dashed gray) */}
+          <path
+            d={meanPath}
+            fill="none"
+            stroke="#9ca3af"
+            strokeWidth="2"
+            strokeDasharray="6,4"
+          />
+
+          {/* Class Median line (blue) */}
+          <path
+            d={medianPath}
+            fill="none"
+            stroke="#60a5fa"
+            strokeWidth="2"
+          />
+
+          {/* Curved Score line (green) */}
+          <path
+            d={curvedPath}
+            fill="none"
+            stroke="#22c55e"
+            strokeWidth="2.5"
+          />
+
+          {/* Student Raw line (yellow/gold - main line) */}
+          <path
+            d={rawPath}
+            fill="none"
+            stroke="#f4c514"
+            strokeWidth="3"
+          />
+
+          {/* Data points for student raw */}
+          {themeScores.map((score, i) => (
+            <g key={score.themeName}>
+              {/* Student raw point */}
+              <circle
+                cx={xScale(i)}
+                cy={yScaleRaw(score.rawCompletion)}
+                r="5"
+                fill="#f4c514"
+                stroke="white"
+                strokeWidth="2"
+              />
+              {/* Curved score point */}
+              <circle
+                cx={xScale(i)}
+                cy={yScaleCurved(score.curvedScore)}
+                r="4"
+                fill="#22c55e"
+                stroke="white"
+                strokeWidth="1.5"
+              />
+            </g>
+          ))}
+
+          {/* X-axis labels (theme names) */}
+          {themeScores.map((score, i) => (
+            <g key={`label-${score.themeName}`}>
+              <text
+                x={xScale(i)}
+                y={height - padding.bottom + 20}
+                textAnchor="middle"
+                className="text-[9px] fill-gray-600 font-bold"
+                transform={`rotate(-30, ${xScale(i)}, ${height - padding.bottom + 20})`}
+              >
+                {score.themeName.length > 12 ? score.themeName.slice(0, 12) + '...' : score.themeName}
+              </text>
+              {/* Category indicator */}
+              {score.themeCategory && (
+                <circle
+                  cx={xScale(i)}
+                  cy={height - padding.bottom + 45}
+                  r="4"
+                  fill={score.themeCategory === 'mechanical' ? '#f97316' : '#3b82f6'}
+                />
+              )}
+            </g>
+          ))}
+
+          {/* Y-axis label */}
+          <text
+            x={15}
+            y={height / 2}
+            textAnchor="middle"
+            transform={`rotate(-90, 15, ${height / 2})`}
+            className="text-[10px] fill-gray-500 font-bold"
+          >
+            Score / Completion %
+          </text>
+        </svg>
+      </div>
+
+      {/* Detailed data table */}
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full text-[9px]">
+          <thead>
+            <tr className="border-b border-slate-200">
+              <th className="text-left py-2 font-black uppercase text-gray-500">Theme</th>
+              <th className="text-right py-2 font-black uppercase text-gray-500">Raw</th>
+              <th className="text-right py-2 font-black uppercase text-gray-500">Mean</th>
+              <th className="text-right py-2 font-black uppercase text-gray-500">Median</th>
+              <th className="text-right py-2 font-black uppercase text-gray-500">Curved</th>
+              <th className="text-right py-2 font-black uppercase text-gray-500">vs Mean</th>
+            </tr>
+          </thead>
+          <tbody>
+            {themeScores.map(score => {
+              const diff = score.rawCompletion - score.classMean;
+              return (
+                <tr key={score.themeName} className="border-b border-slate-100">
+                  <td className="py-2 font-bold flex items-center gap-1">
+                    {score.themeName}
+                    {score.themeCategory && (
+                      <span className={`w-2 h-2 rounded-full ${
+                        score.themeCategory === 'mechanical' ? 'bg-orange-500' : 'bg-blue-500'
+                      }`}></span>
+                    )}
+                  </td>
+                  <td className="text-right py-2 font-black text-[#f4c514]">{Math.round(score.rawCompletion)}%</td>
+                  <td className="text-right py-2 text-gray-500">{Math.round(score.classMean)}%</td>
+                  <td className="text-right py-2 text-blue-500">{Math.round(score.classMedian)}%</td>
+                  <td className="text-right py-2 font-black text-green-600">{Math.round(score.curvedScore)}</td>
+                  <td className={`text-right py-2 font-black ${diff >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    {diff >= 0 ? '+' : ''}{Math.round(diff)}%
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
 // STUDENT PROFILE CARD
 // ============================================================================
 
@@ -473,40 +665,8 @@ const StudentProfileCard: React.FC<{
         </div>
       </div>
 
-      {/* Theme Scores Breakdown */}
-      <div className="space-y-3">
-        <h3 className="text-xs font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic">
-          Theme Breakdown
-        </h3>
-        <div className="space-y-2">
-          {profile.themeScores.map(score => (
-            <div key={score.themeName} className="bg-white border border-slate-100 p-3 rounded-sm">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm">{score.themeName}</span>
-                  {score.themeCategory && (
-                    <span className={`text-[8px] px-1.5 py-0.5 rounded ${
-                      score.themeCategory === 'mechanical' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'
-                    }`}>
-                      {score.themeCategory}
-                    </span>
-                  )}
-                </div>
-                <div className="text-right">
-                  <span className="text-lg font-black">{Math.round(score.curvedScore)}</span>
-                  <span className="text-[9px] text-gray-400 ml-1">curved</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 text-[9px] text-gray-500">
-                <span>Raw: {Math.round(score.rawCompletion)}%</span>
-                <span>Z: {score.zScore.toFixed(2)}</span>
-                <span>Weight: {score.difficultyWeight.toFixed(2)}</span>
-                <span>Percentile: {Math.round(score.percentileInTheme)}%</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Performance Line Graph */}
+      <PerformanceLineGraph themeScores={profile.themeScores} />
     </div>
   );
 };
@@ -558,154 +718,6 @@ const StudentDirectory: React.FC<{
             </div>
           </button>
         ))}
-      </div>
-    </div>
-  );
-};
-
-// ============================================================================
-// CLASS SUMMARY CARD
-// ============================================================================
-
-const ClassSummaryCard: React.FC<{
-  summary: ClassSummary;
-  onClose: () => void;
-}> = ({ summary, onClose }) => {
-  return (
-    <div className="animate-in slide-in-from-right-4 duration-300 space-y-6">
-      {/* Header */}
-      <div className="bg-black p-6 text-white rounded-sm shadow-xl border-b-8 border-[#f4c514]">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h2 className="text-4xl font-black uppercase italic tracking-tighter">{summary.className}</h2>
-            <div className="text-[10px] text-gray-400 font-bold uppercase mt-1">
-              {summary.totalStudents} students
-            </div>
-          </div>
-          <button onClick={onClose} className="text-white/30 hover:text-[#f4c514] transition-colors">
-            <i className="fas fa-times text-xl"></i>
-          </button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 border-t border-white/10 pt-4">
-          <div>
-            <div className="text-[#f4c514] text-xl font-black">{summary.averageOverallScore}</div>
-            <div className="text-[8px] uppercase font-bold text-gray-400">Avg Score</div>
-          </div>
-          <div>
-            <div className="text-[#f4c514] text-xl font-black">{summary.medianOverallScore}</div>
-            <div className="text-[8px] uppercase font-bold text-gray-400">Median</div>
-          </div>
-          <div>
-            <div className="text-[#f4c514] text-xl font-black">{summary.scoreStandardDeviation}</div>
-            <div className="text-[8px] uppercase font-bold text-gray-400">Std Dev</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Domain Performance */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-orange-50 border border-orange-200 p-4 rounded-sm">
-          <div className="text-[9px] font-black uppercase text-orange-800 mb-1">
-            <i className="fas fa-cog mr-1"></i> Mechanical Avg
-          </div>
-          <div className="text-3xl font-black text-orange-600">{summary.averageMechanicalScore}</div>
-        </div>
-        <div className="bg-blue-50 border border-blue-200 p-4 rounded-sm">
-          <div className="text-[9px] font-black uppercase text-blue-800 mb-1">
-            <i className="fas fa-code mr-1"></i> Programming Avg
-          </div>
-          <div className="text-3xl font-black text-blue-600">{summary.averageProgrammingScore}</div>
-        </div>
-      </div>
-
-      {/* Growth Distribution */}
-      <div className="bg-[#fff1d1] border border-[#ffe5a0] p-6 rounded-sm">
-        <h3 className="text-xs font-black uppercase tracking-widest mb-4">Growth Trends</h3>
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <div className="text-2xl font-black text-green-600">{summary.studentsImproving}</div>
-            <div className="text-[9px] text-gray-500 font-bold uppercase">Improving</div>
-            <div className="text-[9px] text-green-600">{Math.round(summary.improvingPercent)}%</div>
-          </div>
-          <div>
-            <div className="text-2xl font-black text-gray-600">{summary.studentsStable}</div>
-            <div className="text-[9px] text-gray-500 font-bold uppercase">Stable</div>
-          </div>
-          <div>
-            <div className="text-2xl font-black text-red-600">{summary.studentsDeclining}</div>
-            <div className="text-[9px] text-gray-500 font-bold uppercase">Declining</div>
-            <div className="text-[9px] text-red-600">{Math.round(summary.decliningPercent)}%</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Strength Distribution */}
-      <div className="bg-white border border-slate-200 p-6 rounded-sm">
-        <h3 className="text-xs font-black uppercase tracking-widest mb-4">Strength Distribution</h3>
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <div className="text-2xl font-black text-orange-600">{summary.mechanicalStrengthCount}</div>
-            <div className="text-[9px] text-gray-500 font-bold uppercase">Mechanical</div>
-          </div>
-          <div>
-            <div className="text-2xl font-black text-gray-600">{summary.balancedCount}</div>
-            <div className="text-[9px] text-gray-500 font-bold uppercase">Balanced</div>
-          </div>
-          <div>
-            <div className="text-2xl font-black text-blue-600">{summary.programmingStrengthCount}</div>
-            <div className="text-[9px] text-gray-500 font-bold uppercase">Programming</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Score Distribution */}
-      <div className="bg-slate-50 border border-slate-200 p-6 rounded-sm">
-        <h3 className="text-xs font-black uppercase tracking-widest mb-4">Score Distribution</h3>
-        <div className="space-y-2">
-          {summary.scoreDistribution.map(bucket => (
-            <div key={bucket.bucket} className="flex items-center gap-3">
-              <span className="text-[10px] font-bold text-gray-500 w-16">{bucket.bucket}</span>
-              <div className="flex-1 bg-slate-200 h-4 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[#f4c514]"
-                  style={{ width: `${bucket.percent}%` }}
-                ></div>
-              </div>
-              <span className="text-[10px] font-bold text-gray-600 w-8">{bucket.count}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Top/Bottom Performers */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-green-50 border border-green-200 p-4 rounded-sm">
-          <h4 className="text-[9px] font-black uppercase text-green-800 mb-3">
-            <i className="fas fa-trophy mr-1"></i> Top Performers
-          </h4>
-          <div className="space-y-2">
-            {summary.topPerformers.map((p, i) => (
-              <div key={p.studentName} className="flex justify-between text-[10px]">
-                <span className="font-bold">{i + 1}. {p.studentName}</span>
-                <span className="text-green-600 font-black">{p.score}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="bg-amber-50 border border-amber-200 p-4 rounded-sm">
-          <h4 className="text-[9px] font-black uppercase text-amber-800 mb-3">
-            <i className="fas fa-hand-holding-heart mr-1"></i> Needs Attention
-          </h4>
-          <div className="space-y-2">
-            {summary.needsAttention.map((p, i) => (
-              <div key={p.studentName} className="flex justify-between text-[10px]">
-                <span className="font-bold">{i + 1}. {p.studentName}</span>
-                <span className="text-amber-600 font-black">{p.score}</span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
