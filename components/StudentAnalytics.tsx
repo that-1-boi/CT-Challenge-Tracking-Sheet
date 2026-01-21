@@ -448,8 +448,8 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
   };
 
   // Point size calculation with non-linear scale
-  const MIN_RADIUS = 6;
-  const MAX_RADIUS = 24;
+  const MIN_RADIUS = 12;
+  const MAX_RADIUS = 32;
 
   const getRadius = (curvedAvg: number) => {
     // Normalize 40–60 → 0–1
@@ -501,7 +501,7 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
           <h3 className="text-sm font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic">
             Team Readiness Map
           </h3>
-          <p className="text-[9px] text-gray-500 mt-1 pl-4">
+          <p className="text-[16px] text-gray-500 mt-1 pl-4">
             X = Mechanical | Y = Programming | Size = Overall Score
           </p>
         </div>
@@ -514,15 +514,15 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[#eab308]"></span>
-            <span className="font-bold text-gray-600">Near ({tierCounts['near-ready']})</span>
+            <span className="font-bold text-gray-600">Potential ({tierCounts['near-ready']})</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[#3b82f6]"></span>
-            <span className="font-bold text-gray-600">Specialist ({tierCounts['specialist']})</span>
+            <span className="font-bold text-gray-600">Progressing ({tierCounts['specialist']})</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[#ef4444]"></span>
-            <span className="font-bold text-gray-600">Develop ({tierCounts['not-ready']})</span>
+            <span className="font-bold text-gray-600">Developing ({tierCounts['not-ready']})</span>
           </div>
         </div>
       </div>
