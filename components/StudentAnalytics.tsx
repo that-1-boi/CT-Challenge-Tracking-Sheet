@@ -201,24 +201,8 @@ const OverviewSection: React.FC<{ analytics: AnalyticsResult }> = ({ analytics }
         />
       </div>
 
-      {/* Domain Performance */}
-      <div className="bg-black p-6 rounded-sm shadow-xl">
-        <h3 className="text-[#f4c514] font-black uppercase text-xs tracking-widest mb-4">Global Domain Performance</h3>
-        <div className="grid grid-cols-2 gap-6">
-          <div className="text-center">
-            <div className="text-3xl font-black text-orange-400">{analytics.globalMechanicalAverage}</div>
-            <div className="text-[9px] uppercase text-gray-400 font-bold mt-1">
-              <i className="fas fa-cog mr-1"></i> Mechanical Avg
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-3xl font-black text-blue-400">{analytics.globalProgrammingAverage}</div>
-            <div className="text-[9px] uppercase text-gray-400 font-bold mt-1">
-              <i className="fas fa-code mr-1"></i> Programming Avg
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Student Scatter Plot - Team Readiness Map */}
+      <StudentScatterPlot profiles={analytics.studentProfiles} />
 
       {/* Theme Difficulty */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -308,6 +292,397 @@ const StatCard: React.FC<{
     <div className={`text-2xl font-black ${valueColor}`}>{value}</div>
   </div>
 );
+
+// ============================================================================
+// READINESS TIER LOGIC
+// ============================================================================
+
+type ReadinessTier = 'competition-ready' | 'near-ready' | 'specialist' | 'not-ready';
+
+interface StudentPoint {
+  profile: StudentProfile;
+  tier: ReadinessTier;
+  tierLabel: string;
+  color: string;
+}
+
+function getReadinessTier(profile: StudentProfile): { tier: ReadinessTier; label: string; color: string } {
+  const curvedAvg = profile.overallScore;
+  const mech = profile.mechanicalScore;
+  const prog = profile.programmingScore;
+
+  // Competition Ready: curved_avg >= 85 AND mech >= 60 AND prog >= 60
+  if (curvedAvg >= 85 && mech >= 60 && prog >= 60) {
+    return { tier: 'competition-ready', label: 'Competition Ready', color: '#22c55e' };
+  }
+
+  // Near Ready: curved_avg >= 70
+  if (curvedAvg >= 70) {
+    return { tier: 'near-ready', label: 'Near Ready', color: '#eab308' };
+  }
+
+  // Specialist: mech >= 80 XOR prog >= 80 (one but not both)
+  const mechSpecialist = mech >= 80;
+  const progSpecialist = prog >= 80;
+  if ((mechSpecialist && !progSpecialist) || (!mechSpecialist && progSpecialist)) {
+    return { tier: 'specialist', label: 'Specialist', color: '#3b82f6' };
+  }
+
+  // Not Ready: otherwise
+  return { tier: 'not-ready', label: 'Not Ready', color: '#ef4444' };
+}
+
+// ============================================================================
+// STUDENT SCATTER PLOT COMPONENT
+// ============================================================================
+
+const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [hoveredStudent, setHoveredStudent] = useState<{ point: StudentPoint; x: number; y: number } | null>(null);
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+
+  // Process students into points with tier information
+  const studentPoints: StudentPoint[] = useMemo(() => {
+    return profiles.map(profile => {
+      const { tier, label, color } = getReadinessTier(profile);
+      return { profile, tier, tierLabel: label, color };
+    });
+  }, [profiles]);
+
+  // Calculate medians for crosshairs
+  const medians = useMemo(() => {
+    if (profiles.length === 0) return { mechanical: 50, programming: 50 };
+    const mechScores = profiles.map(p => p.mechanicalScore).sort((a, b) => a - b);
+    const progScores = profiles.map(p => p.programmingScore).sort((a, b) => a - b);
+    const mid = Math.floor(profiles.length / 2);
+    return {
+      mechanical: profiles.length % 2 === 0
+        ? (mechScores[mid - 1] + mechScores[mid]) / 2
+        : mechScores[mid],
+      programming: profiles.length % 2 === 0
+        ? (progScores[mid - 1] + progScores[mid]) / 2
+        : progScores[mid],
+    };
+  }, [profiles]);
+
+  // Calculate competition pool (top 15-20% by curved average)
+  const competitionPool = useMemo(() => {
+    if (profiles.length < 5) return [];
+    const sorted = [...profiles].sort((a, b) => b.overallScore - a.overallScore);
+    const topCount = Math.max(3, Math.ceil(profiles.length * 0.18)); // ~18% = between 15-20%
+    return sorted.slice(0, topCount);
+  }, [profiles]);
+
+  // Calculate convex hull for competition pool
+  const convexHullPoints = useMemo(() => {
+    if (competitionPool.length < 3) return [];
+
+    // Get points for convex hull calculation
+    const points = competitionPool.map(p => ({
+      x: p.mechanicalScore,
+      y: p.programmingScore,
+    }));
+
+    // Gift wrapping algorithm for convex hull
+    const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) =>
+      (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+    const sortedPoints = [...points].sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+
+    const lower: { x: number; y: number }[] = [];
+    for (const p of sortedPoints) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+        lower.pop();
+      }
+      lower.push(p);
+    }
+
+    const upper: { x: number; y: number }[] = [];
+    for (let i = sortedPoints.length - 1; i >= 0; i--) {
+      const p = sortedPoints[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+        upper.pop();
+      }
+      upper.push(p);
+    }
+
+    lower.pop();
+    upper.pop();
+    return [...lower, ...upper];
+  }, [competitionPool]);
+
+  // Tier counts for legend
+  const tierCounts = useMemo(() => {
+    const counts = { 'competition-ready': 0, 'near-ready': 0, 'specialist': 0, 'not-ready': 0 };
+    studentPoints.forEach(sp => counts[sp.tier]++);
+    return counts;
+  }, [studentPoints]);
+
+  if (profiles.length === 0) {
+    return (
+      <div className="bg-slate-50 border border-slate-200 p-8 rounded-sm text-center">
+        <p className="text-[10px] text-gray-400 uppercase font-bold">No student data available</p>
+      </div>
+    );
+  }
+
+  // Chart dimensions
+  const width = 700;
+  const height = 500;
+  const padding = { top: 30, right: 30, bottom: 50, left: 55 };
+  const graphWidth = width - padding.left - padding.right;
+  const graphHeight = height - padding.top - padding.bottom;
+
+  // Fixed axes: 0-100 for both
+  const xScale = (value: number) => padding.left + (value / 100) * graphWidth;
+  const yScale = (value: number) => padding.top + graphHeight - (value / 100) * graphHeight;
+
+  // Point size calculation with non-linear scale
+  const MIN_RADIUS = 4;
+  const MAX_RADIUS = 18;
+  const SCALE_FACTOR = 0.12;
+  const getRadius = (curvedAvg: number) => {
+    const scaled = Math.pow(curvedAvg, 1.3) * SCALE_FACTOR;
+    return Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, MIN_RADIUS + scaled));
+  };
+
+  // Handle hover
+  const handleMouseEnter = (point: StudentPoint, event: React.MouseEvent<SVGCircleElement>) => {
+    if (!containerRef.current) return;
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const circleRect = event.currentTarget.getBoundingClientRect();
+    const x = circleRect.left + circleRect.width / 2 - containerRect.left;
+    const y = circleRect.top - containerRect.top - 10;
+    setHoveredStudent({ point, x, y });
+  };
+
+  // Handle shift-click for comparison selection
+  const handleClick = (point: StudentPoint, event: React.MouseEvent) => {
+    if (event.shiftKey) {
+      setSelectedStudents(prev => {
+        const next = new Set(prev);
+        if (next.has(point.profile.studentId)) {
+          next.delete(point.profile.studentId);
+        } else {
+          next.add(point.profile.studentId);
+        }
+        return next;
+      });
+    } else {
+      setSelectedStudents(new Set([point.profile.studentId]));
+    }
+  };
+
+  // Sort points so larger ones render first (smaller on top)
+  const sortedPoints = [...studentPoints].sort((a, b) =>
+    getRadius(b.profile.overallScore) - getRadius(a.profile.overallScore)
+  );
+
+  return (
+    <div className="bg-white border-2 border-slate-200 p-6 rounded-sm">
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic">
+            Team Readiness Map
+          </h3>
+          <p className="text-[9px] text-gray-500 mt-1 pl-4">
+            X = Mechanical | Y = Programming | Size = Overall Score
+          </p>
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap gap-3 text-[9px]">
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-[#22c55e]"></span>
+            <span className="font-bold text-gray-600">Ready ({tierCounts['competition-ready']})</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-[#eab308]"></span>
+            <span className="font-bold text-gray-600">Near ({tierCounts['near-ready']})</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-[#3b82f6]"></span>
+            <span className="font-bold text-gray-600">Specialist ({tierCounts['specialist']})</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-[#ef4444]"></span>
+            <span className="font-bold text-gray-600">Develop ({tierCounts['not-ready']})</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto relative" ref={containerRef}>
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ minHeight: '400px', maxHeight: '500px' }}>
+          {/* Background quadrant fills */}
+          <rect x={xScale(medians.mechanical)} y={padding.top} width={graphWidth - (xScale(medians.mechanical) - padding.left)} height={yScale(medians.programming) - padding.top} fill="#dcfce7" opacity="0.3" />
+          <rect x={padding.left} y={padding.top} width={xScale(medians.mechanical) - padding.left} height={yScale(medians.programming) - padding.top} fill="#dbeafe" opacity="0.3" />
+          <rect x={xScale(medians.mechanical)} y={yScale(medians.programming)} width={graphWidth - (xScale(medians.mechanical) - padding.left)} height={graphHeight - (yScale(medians.programming) - padding.top)} fill="#fef3c7" opacity="0.3" />
+          <rect x={padding.left} y={yScale(medians.programming)} width={xScale(medians.mechanical) - padding.left} height={graphHeight - (yScale(medians.programming) - padding.top)} fill="#fee2e2" opacity="0.3" />
+
+          {/* Quadrant labels */}
+          <text x={xScale(75)} y={yScale(85)} textAnchor="middle" className="text-[8px] fill-green-600 font-bold opacity-60">CORE CANDIDATES</text>
+          <text x={xScale(25)} y={yScale(85)} textAnchor="middle" className="text-[8px] fill-blue-600 font-bold opacity-60">PROGRAMMERS</text>
+          <text x={xScale(75)} y={yScale(15)} textAnchor="middle" className="text-[8px] fill-amber-600 font-bold opacity-60">BUILDERS</text>
+          <text x={xScale(25)} y={yScale(15)} textAnchor="middle" className="text-[8px] fill-red-600 font-bold opacity-60">DEVELOPING</text>
+
+          {/* Grid lines */}
+          {[0, 20, 40, 60, 80, 100].map(v => (
+            <g key={`grid-${v}`}>
+              {/* Vertical */}
+              <line x1={xScale(v)} y1={padding.top} x2={xScale(v)} y2={height - padding.bottom} stroke="#e5e7eb" strokeWidth="1" />
+              {/* Horizontal */}
+              <line x1={padding.left} y1={yScale(v)} x2={width - padding.right} y2={yScale(v)} stroke="#e5e7eb" strokeWidth="1" />
+            </g>
+          ))}
+
+          {/* Median crosshairs */}
+          <line
+            x1={xScale(medians.mechanical)} y1={padding.top}
+            x2={xScale(medians.mechanical)} y2={height - padding.bottom}
+            stroke="#6b7280" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.7"
+          />
+          <line
+            x1={padding.left} y1={yScale(medians.programming)}
+            x2={width - padding.right} y2={yScale(medians.programming)}
+            stroke="#6b7280" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.7"
+          />
+
+          {/* Competition pool convex hull */}
+          {convexHullPoints.length >= 3 && (
+            <polygon
+              points={convexHullPoints.map(p => `${xScale(p.x)},${yScale(p.y)}`).join(' ')}
+              fill="#22c55e"
+              fillOpacity="0.1"
+              stroke="#22c55e"
+              strokeWidth="2"
+              strokeDasharray="4,2"
+            />
+          )}
+
+          {/* Competition Pool label */}
+          {convexHullPoints.length >= 3 && (
+            <text
+              x={xScale(Math.max(...convexHullPoints.map(p => p.x)) - 5)}
+              y={yScale(Math.max(...convexHullPoints.map(p => p.y)) + 5)}
+              className="text-[8px] fill-green-700 font-black"
+            >
+              COMPETITION POOL
+            </text>
+          )}
+
+          {/* X-axis labels */}
+          {[0, 20, 40, 60, 80, 100].map(v => (
+            <text key={`x-${v}`} x={xScale(v)} y={height - padding.bottom + 18} textAnchor="middle" className="text-[10px] fill-gray-500 font-bold">
+              {v}
+            </text>
+          ))}
+          <text x={width / 2} y={height - 8} textAnchor="middle" className="text-[10px] fill-orange-600 font-black uppercase">
+            <tspan><tspan className="fas">&#xf013;</tspan> Mechanical Proficiency</tspan>
+          </text>
+
+          {/* Y-axis labels */}
+          {[0, 20, 40, 60, 80, 100].map(v => (
+            <text key={`y-${v}`} x={padding.left - 10} y={yScale(v) + 4} textAnchor="end" className="text-[10px] fill-gray-500 font-bold">
+              {v}
+            </text>
+          ))}
+          <text x={15} y={height / 2} textAnchor="middle" transform={`rotate(-90, 15, ${height / 2})`} className="text-[10px] fill-blue-600 font-black uppercase">
+            Programming Proficiency
+          </text>
+
+          {/* Student points - sorted so smaller (higher score) on top */}
+          {sortedPoints.map(point => {
+            const r = getRadius(point.profile.overallScore);
+            const isSelected = selectedStudents.has(point.profile.studentId);
+            const isHovered = hoveredStudent?.point.profile.studentId === point.profile.studentId;
+
+            // Apply slight jitter to prevent exact overlaps
+            const jitterX = (Math.sin(point.profile.studentId.charCodeAt(0) * 0.5) * 2);
+            const jitterY = (Math.cos(point.profile.studentId.charCodeAt(0) * 0.7) * 2);
+
+            return (
+              <circle
+                key={point.profile.studentId}
+                cx={xScale(point.profile.mechanicalScore) + jitterX}
+                cy={yScale(point.profile.programmingScore) + jitterY}
+                r={isHovered ? r + 2 : r}
+                fill={point.color}
+                fillOpacity={isSelected ? 1 : 0.85}
+                stroke={isSelected ? '#000' : isHovered ? '#000' : 'white'}
+                strokeWidth={isSelected ? 3 : isHovered ? 2 : 1.5}
+                className="cursor-pointer transition-all duration-150"
+                onMouseEnter={(e) => handleMouseEnter(point, e)}
+                onMouseLeave={() => setHoveredStudent(null)}
+                onClick={(e) => handleClick(point, e)}
+              />
+            );
+          })}
+
+          {/* Border */}
+          <rect x={padding.left} y={padding.top} width={graphWidth} height={graphHeight} fill="none" stroke="#d1d5db" strokeWidth="1" />
+        </svg>
+
+        {/* HTML tooltip */}
+        {hoveredStudent && (
+          <div
+            className="absolute z-50 bg-black text-white text-[10px] p-3 rounded shadow-xl pointer-events-none"
+            style={{
+              left: hoveredStudent.x,
+              top: hoveredStudent.y,
+              transform: 'translate(-50%, -100%)',
+              minWidth: '160px',
+            }}
+          >
+            <div className="font-black text-sm uppercase mb-2 text-[#f4c514]">{hoveredStudent.point.profile.studentName}</div>
+            <div className="space-y-1">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Mechanical:</span>
+                <span className="font-bold text-orange-400">{Math.round(hoveredStudent.point.profile.mechanicalScore)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Programming:</span>
+                <span className="font-bold text-blue-400">{Math.round(hoveredStudent.point.profile.programmingScore)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Raw Avg:</span>
+                <span className="font-bold">{Math.round(hoveredStudent.point.profile.averageRawCompletion)}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Curved Avg:</span>
+                <span className="font-bold">{Math.round(hoveredStudent.point.profile.overallScore)}</span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-white/20 mt-1">
+                <span className="text-gray-400">Tier:</span>
+                <span className="font-black" style={{ color: hoveredStudent.point.color }}>{hoveredStudent.point.tierLabel}</span>
+              </div>
+            </div>
+            <div className="text-[8px] text-gray-500 mt-2 text-center">Shift+click to compare</div>
+          </div>
+        )}
+      </div>
+
+      {/* Quick stats below chart */}
+      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+        <div className="bg-green-50 border border-green-200 p-2 rounded">
+          <div className="text-lg font-black text-green-600">{tierCounts['competition-ready']}</div>
+          <div className="text-[8px] uppercase font-bold text-green-700">Competition Ready</div>
+        </div>
+        <div className="bg-yellow-50 border border-yellow-200 p-2 rounded">
+          <div className="text-lg font-black text-yellow-600">{tierCounts['near-ready']}</div>
+          <div className="text-[8px] uppercase font-bold text-yellow-700">Near Ready</div>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 p-2 rounded">
+          <div className="text-lg font-black text-blue-600">{tierCounts['specialist']}</div>
+          <div className="text-[8px] uppercase font-bold text-blue-700">Specialists</div>
+        </div>
+        <div className="bg-red-50 border border-red-200 p-2 rounded">
+          <div className="text-lg font-black text-red-600">{tierCounts['not-ready']}</div>
+          <div className="text-[8px] uppercase font-bold text-red-700">Developing</div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ============================================================================
 // LINE GRAPH COMPONENT (SVG-based)
