@@ -339,7 +339,6 @@ function getReadinessTier(profile: StudentProfile): { tier: ReadinessTier; label
 const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [hoveredStudent, setHoveredStudent] = useState<{ point: StudentPoint; x: number; y: number } | null>(null);
-  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
 
   // Process students into points with tier information
   const studentPoints: StudentPoint[] = useMemo(() => {
@@ -426,51 +425,63 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
     );
   }
 
-  // Chart dimensions
-  const width = 700;
-  const height = 500;
-  const padding = { top: 30, right: 30, bottom: 50, left: 55 };
+  // Chart dimensions - 3x width, 2x height for better spread
+  const width = 2100;
+  const height = 1000;
+  const padding = { top: 40, right: 40, bottom: 70, left: 70 };
   const graphWidth = width - padding.left - padding.right;
   const graphHeight = height - padding.top - padding.bottom;
 
-  // Fixed axes: 0-100 for both
-  const xScale = (value: number) => padding.left + (value / 100) * graphWidth;
-  const yScale = (value: number) => padding.top + graphHeight - (value / 100) * graphHeight;
+  // Axis range: 20-80 (instead of 0-100)
+  const AXIS_MIN = 20;
+  const AXIS_MAX = 80;
+  const AXIS_RANGE = AXIS_MAX - AXIS_MIN;
+
+  // Fixed axes: 20-80 for both
+  const xScale = (value: number) => {
+    const clamped = Math.max(AXIS_MIN, Math.min(AXIS_MAX, value));
+    return padding.left + ((clamped - AXIS_MIN) / AXIS_RANGE) * graphWidth;
+  };
+  const yScale = (value: number) => {
+    const clamped = Math.max(AXIS_MIN, Math.min(AXIS_MAX, value));
+    return padding.top + graphHeight - ((clamped - AXIS_MIN) / AXIS_RANGE) * graphHeight;
+  };
 
   // Point size calculation with non-linear scale
-  const MIN_RADIUS = 4;
-  const MAX_RADIUS = 18;
-  const SCALE_FACTOR = 0.12;
+  const MIN_RADIUS = 6;
+  const MAX_RADIUS = 24;
+  const SCALE_FACTOR = 0.15;
   const getRadius = (curvedAvg: number) => {
     const scaled = Math.pow(curvedAvg, 1.3) * SCALE_FACTOR;
     return Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, MIN_RADIUS + scaled));
   };
 
-  // Handle hover
+  // Handle hover with boundary-aware tooltip positioning
   const handleMouseEnter = (point: StudentPoint, event: React.MouseEvent<SVGCircleElement>) => {
     if (!containerRef.current) return;
     const containerRect = containerRef.current.getBoundingClientRect();
     const circleRect = event.currentTarget.getBoundingClientRect();
-    const x = circleRect.left + circleRect.width / 2 - containerRect.left;
-    const y = circleRect.top - containerRect.top - 10;
-    setHoveredStudent({ point, x, y });
-  };
 
-  // Handle shift-click for comparison selection
-  const handleClick = (point: StudentPoint, event: React.MouseEvent) => {
-    if (event.shiftKey) {
-      setSelectedStudents(prev => {
-        const next = new Set(prev);
-        if (next.has(point.profile.studentId)) {
-          next.delete(point.profile.studentId);
-        } else {
-          next.add(point.profile.studentId);
-        }
-        return next;
-      });
-    } else {
-      setSelectedStudents(new Set([point.profile.studentId]));
+    let x = circleRect.left + circleRect.width / 2 - containerRect.left;
+    let y = circleRect.top - containerRect.top - 10;
+
+    // Clamp tooltip position to stay within container bounds
+    const tooltipWidth = 180;
+    const tooltipHeight = 180;
+
+    // Horizontal bounds
+    if (x - tooltipWidth / 2 < 0) {
+      x = tooltipWidth / 2 + 10;
+    } else if (x + tooltipWidth / 2 > containerRect.width) {
+      x = containerRect.width - tooltipWidth / 2 - 10;
     }
+
+    // Vertical bounds - if tooltip would go above container, show below the point
+    if (y - tooltipHeight < 0) {
+      y = circleRect.bottom - containerRect.top + 10;
+    }
+
+    setHoveredStudent({ point, x, y });
   };
 
   // Sort points so larger ones render first (smaller on top)
@@ -512,21 +523,21 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
       </div>
 
       <div className="overflow-x-auto relative" ref={containerRef}>
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ minHeight: '400px', maxHeight: '500px' }}>
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ minHeight: '800px', maxHeight: '1000px' }}>
           {/* Background quadrant fills */}
           <rect x={xScale(medians.mechanical)} y={padding.top} width={graphWidth - (xScale(medians.mechanical) - padding.left)} height={yScale(medians.programming) - padding.top} fill="#dcfce7" opacity="0.3" />
           <rect x={padding.left} y={padding.top} width={xScale(medians.mechanical) - padding.left} height={yScale(medians.programming) - padding.top} fill="#dbeafe" opacity="0.3" />
           <rect x={xScale(medians.mechanical)} y={yScale(medians.programming)} width={graphWidth - (xScale(medians.mechanical) - padding.left)} height={graphHeight - (yScale(medians.programming) - padding.top)} fill="#fef3c7" opacity="0.3" />
           <rect x={padding.left} y={yScale(medians.programming)} width={xScale(medians.mechanical) - padding.left} height={graphHeight - (yScale(medians.programming) - padding.top)} fill="#fee2e2" opacity="0.3" />
 
-          {/* Quadrant labels */}
-          <text x={xScale(75)} y={yScale(85)} textAnchor="middle" className="text-[8px] fill-green-600 font-bold opacity-60">CORE CANDIDATES</text>
-          <text x={xScale(25)} y={yScale(85)} textAnchor="middle" className="text-[8px] fill-blue-600 font-bold opacity-60">PROGRAMMERS</text>
-          <text x={xScale(75)} y={yScale(15)} textAnchor="middle" className="text-[8px] fill-amber-600 font-bold opacity-60">BUILDERS</text>
-          <text x={xScale(25)} y={yScale(15)} textAnchor="middle" className="text-[8px] fill-red-600 font-bold opacity-60">DEVELOPING</text>
+          {/* Quadrant labels - positioned for 20-80 range */}
+          <text x={xScale(65)} y={yScale(75)} textAnchor="middle" className="text-[14px] fill-green-600 font-bold opacity-60">CORE CANDIDATES</text>
+          <text x={xScale(35)} y={yScale(75)} textAnchor="middle" className="text-[14px] fill-blue-600 font-bold opacity-60">PROGRAMMERS</text>
+          <text x={xScale(65)} y={yScale(25)} textAnchor="middle" className="text-[14px] fill-amber-600 font-bold opacity-60">BUILDERS</text>
+          <text x={xScale(35)} y={yScale(25)} textAnchor="middle" className="text-[14px] fill-red-600 font-bold opacity-60">DEVELOPING</text>
 
-          {/* Grid lines */}
-          {[0, 20, 40, 60, 80, 100].map(v => (
+          {/* Grid lines - 20-80 range with steps of 10 */}
+          {[20, 30, 40, 50, 60, 70, 80].map(v => (
             <g key={`grid-${v}`}>
               {/* Vertical */}
               <line x1={xScale(v)} y1={padding.top} x2={xScale(v)} y2={height - padding.bottom} stroke="#e5e7eb" strokeWidth="1" />
@@ -539,12 +550,12 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
           <line
             x1={xScale(medians.mechanical)} y1={padding.top}
             x2={xScale(medians.mechanical)} y2={height - padding.bottom}
-            stroke="#6b7280" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.7"
+            stroke="#6b7280" strokeWidth="2" strokeDasharray="8,6" opacity="0.7"
           />
           <line
             x1={padding.left} y1={yScale(medians.programming)}
             x2={width - padding.right} y2={yScale(medians.programming)}
-            stroke="#6b7280" strokeWidth="1.5" strokeDasharray="6,4" opacity="0.7"
+            stroke="#6b7280" strokeWidth="2" strokeDasharray="8,6" opacity="0.7"
           />
 
           {/* Competition pool convex hull */}
@@ -554,109 +565,106 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
               fill="#22c55e"
               fillOpacity="0.1"
               stroke="#22c55e"
-              strokeWidth="2"
-              strokeDasharray="4,2"
+              strokeWidth="3"
+              strokeDasharray="6,3"
             />
           )}
 
           {/* Competition Pool label */}
           {convexHullPoints.length >= 3 && (
             <text
-              x={xScale(Math.max(...convexHullPoints.map(p => p.x)) - 5)}
-              y={yScale(Math.max(...convexHullPoints.map(p => p.y)) + 5)}
-              className="text-[8px] fill-green-700 font-black"
+              x={xScale(Math.max(...convexHullPoints.map(p => p.x)) - 2)}
+              y={yScale(Math.max(...convexHullPoints.map(p => p.y)) + 2)}
+              className="text-[12px] fill-green-700 font-black"
             >
               COMPETITION POOL
             </text>
           )}
 
-          {/* X-axis labels */}
-          {[0, 20, 40, 60, 80, 100].map(v => (
-            <text key={`x-${v}`} x={xScale(v)} y={height - padding.bottom + 18} textAnchor="middle" className="text-[10px] fill-gray-500 font-bold">
+          {/* X-axis labels - 20-80 range */}
+          {[20, 30, 40, 50, 60, 70, 80].map(v => (
+            <text key={`x-${v}`} x={xScale(v)} y={height - padding.bottom + 25} textAnchor="middle" className="text-[14px] fill-gray-500 font-bold">
               {v}
             </text>
           ))}
-          <text x={width / 2} y={height - 8} textAnchor="middle" className="text-[10px] fill-orange-600 font-black uppercase">
-            <tspan><tspan className="fas">&#xf013;</tspan> Mechanical Proficiency</tspan>
+          <text x={width / 2} y={height - 15} textAnchor="middle" className="text-[16px] fill-orange-600 font-black uppercase">
+            Mechanical Proficiency
           </text>
 
-          {/* Y-axis labels */}
-          {[0, 20, 40, 60, 80, 100].map(v => (
-            <text key={`y-${v}`} x={padding.left - 10} y={yScale(v) + 4} textAnchor="end" className="text-[10px] fill-gray-500 font-bold">
+          {/* Y-axis labels - 20-80 range */}
+          {[20, 30, 40, 50, 60, 70, 80].map(v => (
+            <text key={`y-${v}`} x={padding.left - 15} y={yScale(v) + 5} textAnchor="end" className="text-[14px] fill-gray-500 font-bold">
               {v}
             </text>
           ))}
-          <text x={15} y={height / 2} textAnchor="middle" transform={`rotate(-90, 15, ${height / 2})`} className="text-[10px] fill-blue-600 font-black uppercase">
+          <text x={25} y={height / 2} textAnchor="middle" transform={`rotate(-90, 25, ${height / 2})`} className="text-[16px] fill-blue-600 font-black uppercase">
             Programming Proficiency
           </text>
 
           {/* Student points - sorted so smaller (higher score) on top */}
           {sortedPoints.map(point => {
             const r = getRadius(point.profile.overallScore);
-            const isSelected = selectedStudents.has(point.profile.studentId);
             const isHovered = hoveredStudent?.point.profile.studentId === point.profile.studentId;
 
             // Apply slight jitter to prevent exact overlaps
-            const jitterX = (Math.sin(point.profile.studentId.charCodeAt(0) * 0.5) * 2);
-            const jitterY = (Math.cos(point.profile.studentId.charCodeAt(0) * 0.7) * 2);
+            const jitterX = (Math.sin(point.profile.studentId.charCodeAt(0) * 0.5) * 3);
+            const jitterY = (Math.cos(point.profile.studentId.charCodeAt(0) * 0.7) * 3);
 
             return (
               <circle
                 key={point.profile.studentId}
                 cx={xScale(point.profile.mechanicalScore) + jitterX}
                 cy={yScale(point.profile.programmingScore) + jitterY}
-                r={isHovered ? r + 2 : r}
+                r={isHovered ? r + 3 : r}
                 fill={point.color}
-                fillOpacity={isSelected ? 1 : 0.85}
-                stroke={isSelected ? '#000' : isHovered ? '#000' : 'white'}
-                strokeWidth={isSelected ? 3 : isHovered ? 2 : 1.5}
+                fillOpacity={0.85}
+                stroke={isHovered ? '#000' : 'white'}
+                strokeWidth={isHovered ? 3 : 2}
                 className="cursor-pointer transition-all duration-150"
                 onMouseEnter={(e) => handleMouseEnter(point, e)}
                 onMouseLeave={() => setHoveredStudent(null)}
-                onClick={(e) => handleClick(point, e)}
               />
             );
           })}
 
           {/* Border */}
-          <rect x={padding.left} y={padding.top} width={graphWidth} height={graphHeight} fill="none" stroke="#d1d5db" strokeWidth="1" />
+          <rect x={padding.left} y={padding.top} width={graphWidth} height={graphHeight} fill="none" stroke="#d1d5db" strokeWidth="2" />
         </svg>
 
-        {/* HTML tooltip */}
+        {/* HTML tooltip - positioned to stay within bounds */}
         {hoveredStudent && (
           <div
-            className="absolute z-50 bg-black text-white text-[10px] p-3 rounded shadow-xl pointer-events-none"
+            className="absolute z-50 bg-black text-white text-[11px] p-4 rounded shadow-xl pointer-events-none"
             style={{
               left: hoveredStudent.x,
               top: hoveredStudent.y,
               transform: 'translate(-50%, -100%)',
-              minWidth: '160px',
+              minWidth: '180px',
             }}
           >
-            <div className="font-black text-sm uppercase mb-2 text-[#f4c514]">{hoveredStudent.point.profile.studentName}</div>
-            <div className="space-y-1">
-              <div className="flex justify-between">
+            <div className="font-black text-base uppercase mb-2 text-[#f4c514]">{hoveredStudent.point.profile.studentName}</div>
+            <div className="space-y-1.5">
+              <div className="flex justify-between gap-4">
                 <span className="text-gray-400">Mechanical:</span>
                 <span className="font-bold text-orange-400">{Math.round(hoveredStudent.point.profile.mechanicalScore)}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-4">
                 <span className="text-gray-400">Programming:</span>
                 <span className="font-bold text-blue-400">{Math.round(hoveredStudent.point.profile.programmingScore)}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-4">
                 <span className="text-gray-400">Raw Avg:</span>
                 <span className="font-bold">{Math.round(hoveredStudent.point.profile.averageRawCompletion)}%</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-4">
                 <span className="text-gray-400">Curved Avg:</span>
                 <span className="font-bold">{Math.round(hoveredStudent.point.profile.overallScore)}</span>
               </div>
-              <div className="flex justify-between pt-1 border-t border-white/20 mt-1">
+              <div className="flex justify-between gap-4 pt-1.5 border-t border-white/20 mt-1.5">
                 <span className="text-gray-400">Tier:</span>
                 <span className="font-black" style={{ color: hoveredStudent.point.color }}>{hoveredStudent.point.tierLabel}</span>
               </div>
             </div>
-            <div className="text-[8px] text-gray-500 mt-2 text-center">Shift+click to compare</div>
           </div>
         )}
       </div>
