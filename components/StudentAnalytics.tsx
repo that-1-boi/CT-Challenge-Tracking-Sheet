@@ -450,9 +450,9 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
   // Point size calculation with non-linear scale
   const MIN_RADIUS = 6;
   const MAX_RADIUS = 24;
-  const SCALE_FACTOR = 0.15;
+  const SCALE_FACTOR = 0.25;
   const getRadius = (curvedAvg: number) => {
-    const scaled = Math.pow(curvedAvg, 1.3) * SCALE_FACTOR;
+    const scaled = Math.pow(curvedAvg, 1.4) * SCALE_FACTOR;
     return Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, MIN_RADIUS + scaled));
   };
 
@@ -502,7 +502,7 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
         </div>
 
         {/* Legend */}
-        <div className="flex flex-wrap gap-3 text-[9px]">
+        <div className="flex flex-wrap gap-3 text-[16px]">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[#22c55e]"></span>
             <span className="font-bold text-gray-600">Ready ({tierCounts['competition-ready']})</span>
@@ -524,17 +524,6 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
 
       <div className="overflow-x-auto relative" ref={containerRef}>
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ minHeight: '800px', maxHeight: '1000px' }}>
-          {/* Background quadrant fills */}
-          <rect x={xScale(medians.mechanical)} y={padding.top} width={graphWidth - (xScale(medians.mechanical) - padding.left)} height={yScale(medians.programming) - padding.top} fill="#dcfce7" opacity="0.3" />
-          <rect x={padding.left} y={padding.top} width={xScale(medians.mechanical) - padding.left} height={yScale(medians.programming) - padding.top} fill="#dbeafe" opacity="0.3" />
-          <rect x={xScale(medians.mechanical)} y={yScale(medians.programming)} width={graphWidth - (xScale(medians.mechanical) - padding.left)} height={graphHeight - (yScale(medians.programming) - padding.top)} fill="#fef3c7" opacity="0.3" />
-          <rect x={padding.left} y={yScale(medians.programming)} width={xScale(medians.mechanical) - padding.left} height={graphHeight - (yScale(medians.programming) - padding.top)} fill="#fee2e2" opacity="0.3" />
-
-          {/* Quadrant labels - positioned for 20-80 range */}
-          <text x={xScale(65)} y={yScale(75)} textAnchor="middle" className="text-[14px] fill-green-600 font-bold opacity-60">CORE CANDIDATES</text>
-          <text x={xScale(35)} y={yScale(75)} textAnchor="middle" className="text-[14px] fill-blue-600 font-bold opacity-60">PROGRAMMERS</text>
-          <text x={xScale(65)} y={yScale(25)} textAnchor="middle" className="text-[14px] fill-amber-600 font-bold opacity-60">BUILDERS</text>
-          <text x={xScale(35)} y={yScale(25)} textAnchor="middle" className="text-[14px] fill-red-600 font-bold opacity-60">DEVELOPING</text>
 
           {/* Grid lines - 20-80 range with steps of 10 */}
           {[20, 30, 40, 50, 60, 70, 80].map(v => (
