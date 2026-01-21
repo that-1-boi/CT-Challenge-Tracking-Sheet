@@ -890,7 +890,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             style={{
               left: hoveredTheme.x,
               top: hoveredTheme.y,
-              transform: 'translateX(-50%)',
+              transform: 'translateX(-50%, -100%)',
             }}
           >
             {hoveredTheme.name}
