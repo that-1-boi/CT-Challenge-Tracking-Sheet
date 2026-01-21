@@ -567,9 +567,9 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
           {/* Competition Pool label */}
           {convexHullPoints.length >= 3 && (
             <text
-              x={xScale(Math.max(...convexHullPoints.map(p => p.x)) + 2)}
-              y={yScale(Math.max(...convexHullPoints.map(p => p.y)) + 1)}
-              className="text-[17px] fill-green-700 font-black"
+              x={xScale(Math.max(...convexHullPoints.map(p => p.x)) - 2)}
+              y={yScale(Math.max(...convexHullPoints.map(p => p.y)) + 2)}
+              className="text-[12px] fill-green-700 font-black"
             >
               COMPETITION POOL
             </text>

@@ -345,9 +345,9 @@ function calculateStudentProfiles(
     // Strength classification
     const strengthDelta = Math.abs(mechanicalScore - programmingScore);
     let strengthClassification: 'Mechanical' | 'Programming' | 'Balanced' = 'Balanced';
-    if (mechanicalScore - programmingScore > 10) {
+    if (mechanicalScore - programmingScore > 3) {
       strengthClassification = 'Mechanical';
-    } else if (programmingScore - mechanicalScore > 10) {
+    } else if (programmingScore - mechanicalScore > 3) {
       strengthClassification = 'Programming';
     }
 
