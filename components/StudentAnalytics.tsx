@@ -314,6 +314,8 @@ const StatCard: React.FC<{
 // ============================================================================
 
 const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ themeScores }) => {
+  const [hoveredTheme, setHoveredTheme] = useState<string | null>(null);
+
   if (themeScores.length === 0) {
     return (
       <div className="bg-slate-50 border border-slate-200 p-8 rounded-sm text-center">
@@ -322,9 +324,10 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
     );
   }
 
-  const width = 900;
-  const height = 400;
-  const padding = { top: 40, right: 40, bottom: 80, left: 60 };
+  // Reduced by 20%: 900x400 -> 720x320
+  const width = 720;
+  const height = 320;
+  const padding = { top: 30, right: 30, bottom: 60, left: 50 };
   const graphWidth = width - padding.left - padding.right;
   const graphHeight = height - padding.top - padding.bottom;
 
@@ -380,7 +383,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
       </div>
 
       <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[700px]" style={{ minHeight: '400px' }}>
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[560px]" style={{ minHeight: '320px' }}>
           {/* Grid lines */}
           {[0, 25, 50, 75, 100].map(v => (
             <g key={v}>
@@ -460,26 +463,44 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             </g>
           ))}
 
-          {/* X-axis labels (theme names) */}
+          {/* X-axis theme indicators with hover tooltips */}
           {themeScores.map((score, i) => (
-            <g key={`label-${score.themeName}`}>
-              <text
-                x={xScale(i)}
-                y={height - padding.bottom + 20}
-                textAnchor="middle"
-                className="text-[9px] fill-gray-600 font-bold"
-                transform={`rotate(-30, ${xScale(i)}, ${height - padding.bottom + 20})`}
-              >
-                {score.themeName.length > 12 ? score.themeName.slice(0, 12) + '...' : score.themeName}
-              </text>
-              {/* Category indicator */}
-              {score.themeCategory && (
-                <circle
-                  cx={xScale(i)}
-                  cy={height - padding.bottom + 55}
-                  r="5"
-                  fill={score.themeCategory === 'mechanical' ? '#f97316' : '#3b82f6'}
-                />
+            <g
+              key={`label-${score.themeName}`}
+              onMouseEnter={() => setHoveredTheme(score.themeName)}
+              onMouseLeave={() => setHoveredTheme(null)}
+              style={{ cursor: 'pointer' }}
+            >
+              {/* Category indicator circle - 30% larger (r=5 -> r=6.5) */}
+              <circle
+                cx={xScale(i)}
+                cy={height - padding.bottom + 20}
+                r="6.5"
+                fill={score.themeCategory === 'mechanical' ? '#f97316' : score.themeCategory === 'programming' ? '#3b82f6' : '#9ca3af'}
+                stroke={hoveredTheme === score.themeName ? '#000' : 'white'}
+                strokeWidth={hoveredTheme === score.themeName ? 2 : 1.5}
+                className="transition-all duration-150"
+              />
+              {/* Theme name tooltip on hover */}
+              {hoveredTheme === score.themeName && (
+                <g>
+                  <rect
+                    x={xScale(i) - 60}
+                    y={height - padding.bottom + 32}
+                    width="120"
+                    height="22"
+                    fill="black"
+                    rx="3"
+                  />
+                  <text
+                    x={xScale(i)}
+                    y={height - padding.bottom + 47}
+                    textAnchor="middle"
+                    className="text-[10px] fill-white font-bold"
+                  >
+                    {score.themeName.length > 16 ? score.themeName.slice(0, 16) + '...' : score.themeName}
+                  </text>
+                </g>
               )}
             </g>
           ))}
@@ -553,21 +574,23 @@ const StudentProfileCard: React.FC<{
       <div className="bg-black p-6 text-white rounded-sm shadow-xl relative overflow-hidden border-b-8 border-[#f4c514]">
         <div className="relative z-10">
           <div className="flex items-start justify-between mb-4">
-            <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">{profile.studentName}</h2>
-            <div className="flex items-center gap-3">
-              {/* Domain Scores in Header */}
-              <div className="flex items-center gap-1 bg-orange-500/20 px-2 py-1 rounded">
-                <i className="fas fa-cog text-orange-400 text-xs"></i>
-                <span className="text-orange-400 font-black text-sm">{Math.round(profile.mechanicalScore)}</span>
+            <div className="flex items-center gap-4 flex-wrap">
+              <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">{profile.studentName}</h2>
+              {/* Domain Scores directly after name - larger */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 bg-orange-500/20 px-3 py-2 rounded">
+                  <i className="fas fa-cog text-orange-400 text-base"></i>
+                  <span className="text-orange-400 font-black text-xl">{Math.round(profile.mechanicalScore)}</span>
+                </div>
+                <div className="flex items-center gap-2 bg-blue-500/20 px-3 py-2 rounded">
+                  <i className="fas fa-code text-blue-400 text-base"></i>
+                  <span className="text-blue-400 font-black text-xl">{Math.round(profile.programmingScore)}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-1 bg-blue-500/20 px-2 py-1 rounded">
-                <i className="fas fa-code text-blue-400 text-xs"></i>
-                <span className="text-blue-400 font-black text-sm">{Math.round(profile.programmingScore)}</span>
-              </div>
-              <button onClick={onClose} className="text-white/30 hover:text-[#f4c514] transition-colors ml-2">
-                <i className="fas fa-times text-xl"></i>
-              </button>
             </div>
+            <button onClick={onClose} className="text-white/30 hover:text-[#f4c514] transition-colors">
+              <i className="fas fa-times text-xl"></i>
+            </button>
           </div>
 
           {/* Overall Score */}
