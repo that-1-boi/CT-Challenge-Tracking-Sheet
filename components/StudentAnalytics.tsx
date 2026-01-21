@@ -924,7 +924,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
               const diff = score.rawCompletion - score.classMean;
               return (
                 <tr key={score.themeName} className="border-b border-slate-100">
-                  <td className="py-2 font-bold flex items-center gap-1">
+                  <td className="py-2 flex items-center gap-1">
                     {score.themeName}
                     {score.themeCategory && (
                       <span className={`w-2 h-2 rounded-full ${score.themeCategory === 'mechanical' ? 'bg-orange-500' : 'bg-blue-500'
