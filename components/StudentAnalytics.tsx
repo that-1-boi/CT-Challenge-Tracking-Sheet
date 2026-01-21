@@ -702,9 +702,17 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
     const circleRect = event.currentTarget.getBoundingClientRect();
 
     // Calculate position relative to the container
-    const x = circleRect.left + circleRect.width / 2 - containerRect.left;
+    let x = circleRect.left + circleRect.width / 2 - containerRect.left;
     const y = circleRect.bottom - containerRect.top + 8; // 8px below the circle
 
+    //clamp tooltip to stay within container bounds
+    const tooltipWidth = 180;
+    // Horizontal bounds
+    if (x - tooltipWidth / 2 < 0) {
+      x = tooltipWidth / 2 + 10;
+    } else if (x + tooltipWidth / 2 > containerRect.width) {
+      x = containerRect.width - tooltipWidth / 2 - 10;
+    }
     setHoveredTheme({ name: themeName, x, y });
   };
 
@@ -886,7 +894,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
         {/* HTML tooltip - can overflow SVG bounds */}
         {hoveredTheme && (
           <div
-            className="absolute z-50 bg-black text-white text-[16px] font-bold p-4 rounded pointer-events-none"
+            className="absolute z-50 bg-black text-white text-[16px] font-bold px-1.5 py-1 rounded whitespace-nowrap pointer-events-none"
             style={{
               left: hoveredTheme.x,
               top: hoveredTheme.y,
