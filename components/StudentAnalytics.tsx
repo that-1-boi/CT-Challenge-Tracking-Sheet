@@ -35,8 +35,8 @@ const StudentAnalytics: React.FC = () => {
     if (!analytics) return [];
     const profiles = search
       ? analytics.studentProfiles.filter(p =>
-          p.studentName.toLowerCase().includes(search.toLowerCase())
-        )
+        p.studentName.toLowerCase().includes(search.toLowerCase())
+      )
       : analytics.studentProfiles;
     // Sort by highest curved average (overallScore) descending
     return [...profiles].sort((a, b) => b.overallScore - a.overallScore);
@@ -87,8 +87,8 @@ const StudentAnalytics: React.FC = () => {
               setSelectedStudent(null);
             }}
             className={`px-4 py-2 text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === mode
-                ? 'bg-black text-[#f4c514]'
-                : 'bg-[#fff1d1] text-gray-600 hover:bg-[#f4c514] hover:text-black'
+              ? 'bg-black text-[#f4c514]'
+              : 'bg-[#fff1d1] text-gray-600 hover:bg-[#f4c514] hover:text-black'
               }`}
           >
             {mode === 'overview' && <i className="fas fa-chart-pie mr-2"></i>}
@@ -610,8 +610,8 @@ const StudentProfileCard: React.FC<{
         <div className="bg-[#fff1d1] border border-[#ffe5a0] p-4 rounded-sm text-center">
           <div className="text-[9px] font-black uppercase text-gray-500 mb-1">Strength</div>
           <div className={`text-sm font-black uppercase ${profile.strengthClassification === 'Mechanical' ? 'text-orange-600' :
-              profile.strengthClassification === 'Programming' ? 'text-blue-600' :
-                'text-gray-600'
+            profile.strengthClassification === 'Programming' ? 'text-blue-600' :
+              'text-gray-600'
             }`}>
             {profile.strengthClassification}
           </div>
@@ -619,8 +619,8 @@ const StudentProfileCard: React.FC<{
         <div className="bg-[#fff1d1] border border-[#ffe5a0] p-4 rounded-sm text-center">
           <div className="text-[9px] font-black uppercase text-gray-500 mb-1">Growth</div>
           <div className={`text-sm font-black uppercase ${profile.growthTrend === 'Improving' ? 'text-green-600' :
-              profile.growthTrend === 'Declining' ? 'text-red-600' :
-                'text-gray-600'
+            profile.growthTrend === 'Declining' ? 'text-red-600' :
+              'text-gray-600'
             }`}>
             {profile.growthTrend === 'Improving' && <i className="fas fa-arrow-up mr-1"></i>}
             {profile.growthTrend === 'Declining' && <i className="fas fa-arrow-down mr-1"></i>}
@@ -631,8 +631,8 @@ const StudentProfileCard: React.FC<{
         <div className="bg-[#fff1d1] border border-[#ffe5a0] p-4 rounded-sm text-center">
           <div className="text-[9px] font-black uppercase text-gray-500 mb-1">Consistency</div>
           <div className={`text-sm font-black uppercase ${profile.consistencyLevel === 'High' ? 'text-green-600' :
-              profile.consistencyLevel === 'Low' ? 'text-red-600' :
-                'text-yellow-600'
+            profile.consistencyLevel === 'Low' ? 'text-red-600' :
+              'text-yellow-600'
             }`}>
             {profile.consistencyLevel}
           </div>
@@ -675,14 +675,14 @@ const StudentDirectory: React.FC<{
             </div>
             <div className="flex items-center gap-2">
               <span className={`text-[8px] px-2 py-0.5 rounded font-bold uppercase ${profile.strengthClassification === 'Mechanical' ? 'bg-orange-100 text-orange-600' :
-                  profile.strengthClassification === 'Programming' ? 'bg-blue-100 text-blue-600' :
-                    'bg-gray-100 text-gray-600'
+                profile.strengthClassification === 'Programming' ? 'bg-blue-100 text-blue-600' :
+                  'bg-gray-100 text-gray-600'
                 }`}>
                 {profile.strengthClassification}
               </span>
               <span className={`text-[8px] px-2 py-0.5 rounded font-bold uppercase ${profile.growthTrend === 'Improving' ? 'bg-green-100 text-green-600' :
-                  profile.growthTrend === 'Declining' ? 'bg-red-100 text-red-600' :
-                    'bg-gray-100 text-gray-600'
+                profile.growthTrend === 'Declining' ? 'bg-red-100 text-red-600' :
+                  'bg-gray-100 text-gray-600'
                 }`}>
                 {profile.growthTrend}
               </span>
@@ -714,10 +714,10 @@ const ThemesSection: React.FC<{ themeStats: ThemeStatistics[] }> = ({ themeStats
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black ${theme.difficultyLabel === 'Very Hard' ? 'bg-red-100 text-red-600' :
-                    theme.difficultyLabel === 'Hard' ? 'bg-orange-100 text-orange-600' :
-                      theme.difficultyLabel === 'Moderate' ? 'bg-yellow-100 text-yellow-600' :
-                        theme.difficultyLabel === 'Easy' ? 'bg-green-100 text-green-600' :
-                          'bg-emerald-100 text-emerald-600'
+                  theme.difficultyLabel === 'Hard' ? 'bg-orange-100 text-orange-600' :
+                    theme.difficultyLabel === 'Moderate' ? 'bg-yellow-100 text-yellow-600' :
+                      theme.difficultyLabel === 'Easy' ? 'bg-green-100 text-green-600' :
+                        'bg-emerald-100 text-emerald-600'
                   }`}>
                   #{theme.difficultyRank}
                 </span>
@@ -731,9 +731,9 @@ const ThemesSection: React.FC<{ themeStats: ThemeStatistics[] }> = ({ themeStats
                       </span>
                     )}
                     <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold ${theme.difficultyLabel === 'Very Hard' ? 'bg-red-100 text-red-600' :
-                        theme.difficultyLabel === 'Hard' ? 'bg-orange-100 text-orange-600' :
-                          theme.difficultyLabel === 'Moderate' ? 'bg-yellow-100 text-yellow-600' :
-                            'bg-green-100 text-green-600'
+                      theme.difficultyLabel === 'Hard' ? 'bg-orange-100 text-orange-600' :
+                        theme.difficultyLabel === 'Moderate' ? 'bg-yellow-100 text-yellow-600' :
+                          'bg-green-100 text-green-600'
                       }`}>
                       {theme.difficultyLabel}
                     </span>
@@ -776,12 +776,12 @@ const ThemesSection: React.FC<{ themeStats: ThemeStatistics[] }> = ({ themeStats
                 {theme.distribution.map((bucket, i) => (
                   <div
                     key={bucket.bucket}
-                    className={`flex items-center justify-center text-[8px] font-bold text-white ${i === 0 ? 'bg-slate-500' :
-                        i === 1 ? 'bg-red-400' :
-                          i === 2 ? 'bg-orange-400' :
-                            i === 3 ? 'bg-yellow-400' :
-                              i === 4 ? 'bg-green-400' :
-                                'bg-emerald-400'
+                    className={`flex items-center justify-center text-[16px] font-bold text-white ${i === 0 ? 'bg-slate-500' :
+                      i === 1 ? 'bg-red-400' :
+                        i === 2 ? 'bg-orange-400' :
+                          i === 3 ? 'bg-yellow-400' :
+                            i === 4 ? 'bg-green-400' :
+                              'bg-emerald-400'
                       }`}
                     style={{ width: `${Math.max(bucket.percent, 5)}%` }}
                     title={`${bucket.bucket}: ${bucket.count} students (${Math.round(bucket.percent)}%)`}
