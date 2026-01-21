@@ -465,7 +465,8 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
 
           {/* X-axis theme indicators with hover tooltips */}
           {themeScores.map((score, i) => {
-            const tooltipWidth = Math.max(100, score.themeName.length * 2);
+            // Dynamic tooltip width: 6px padding on each side + text width (~5px per char for small font)
+            const tooltipWidth = score.themeName.length * 5 + 12;
             return (
               <g
                 key={`label-${score.themeName}`}
@@ -483,22 +484,22 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
                   strokeWidth={hoveredTheme === score.themeName ? 2 : 1.5}
                   className="transition-all duration-150"
                 />
-                {/* Theme name tooltip on hover - shows full name */}
+                {/* Theme name tooltip on hover - compact with 6px padding */}
                 {hoveredTheme === score.themeName && (
                   <g>
                     <rect
                       x={xScale(i) - tooltipWidth / 2}
-                      y={height - padding.bottom + 25}
+                      y={height - padding.bottom + 24}
                       width={tooltipWidth}
-                      height="18"
+                      height="14"
                       fill="black"
-                      rx="3"
+                      rx="2"
                     />
                     <text
                       x={xScale(i)}
-                      y={height - padding.bottom + 38}
+                      y={height - padding.bottom + 34}
                       textAnchor="middle"
-                      className="text-[9px] fill-white font-bold"
+                      className="text-[8px] fill-white font-bold"
                     >
                       {score.themeName}
                     </text>
@@ -508,12 +509,12 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             );
           })}
 
-          {/* Y-axis label */}
+          {/* Y-axis label - aligned with graph left edge */}
           <text
-            x={20}
+            x={8}
             y={height / 2}
             textAnchor="middle"
-            transform={`rotate(-90, 20, ${height / 2})`}
+            transform={`rotate(-90, 8, ${height / 2})`}
             className="text-[8px] fill-gray-500 font-bold"
           >
             Score / Completion %
