@@ -324,10 +324,10 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
     );
   }
 
-  // Reduced by 20%: 900x400 -> 720x320
+  // Reduced by 30% height: 720x224
   const width = 720;
-  const height = 320;
-  const padding = { top: 30, right: 30, bottom: 60, left: 50 };
+  const height = 224;
+  const padding = { top: 20, right: 30, bottom: 50, left: 45 };
   const graphWidth = width - padding.left - padding.right;
   const graphHeight = height - padding.top - padding.bottom;
 
@@ -383,7 +383,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
       </div>
 
       <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[560px]" style={{ minHeight: '320px' }}>
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[560px]" style={{ minHeight: '224px' }}>
           {/* Grid lines */}
           {[0, 25, 50, 75, 100].map(v => (
             <g key={v}>
@@ -411,8 +411,8 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             d={meanPath}
             fill="none"
             stroke="#9ca3af"
-            strokeWidth="2.5"
-            strokeDasharray="8,5"
+            strokeWidth="1.5"
+            strokeDasharray="6,4"
           />
 
           {/* Class Median line (blue) */}
@@ -420,7 +420,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             d={medianPath}
             fill="none"
             stroke="#60a5fa"
-            strokeWidth="2.5"
+            strokeWidth="1.5"
           />
 
           {/* Curved Score line (green) */}
@@ -428,7 +428,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             d={curvedPath}
             fill="none"
             stroke="#22c55e"
-            strokeWidth="3"
+            strokeWidth="2"
           />
 
           {/* Student Raw line (yellow/gold - main line) */}
@@ -436,7 +436,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             d={rawPath}
             fill="none"
             stroke="#f4c514"
-            strokeWidth="4"
+            strokeWidth="2.5"
           />
 
           {/* Data points for student raw */}
@@ -446,64 +446,67 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
               <circle
                 cx={xScale(i)}
                 cy={yScaleRaw(score.rawCompletion)}
-                r="7"
+                r="5"
                 fill="#f4c514"
                 stroke="white"
-                strokeWidth="2"
+                strokeWidth="1.5"
               />
               {/* Curved score point */}
               <circle
                 cx={xScale(i)}
                 cy={yScaleCurved(score.curvedScore)}
-                r="5"
+                r="3.5"
                 fill="#22c55e"
                 stroke="white"
-                strokeWidth="2"
+                strokeWidth="1.5"
               />
             </g>
           ))}
 
           {/* X-axis theme indicators with hover tooltips */}
-          {themeScores.map((score, i) => (
-            <g
-              key={`label-${score.themeName}`}
-              onMouseEnter={() => setHoveredTheme(score.themeName)}
-              onMouseLeave={() => setHoveredTheme(null)}
-              style={{ cursor: 'pointer' }}
-            >
-              {/* Category indicator circle - 30% larger (r=5 -> r=6.5) */}
-              <circle
-                cx={xScale(i)}
-                cy={height - padding.bottom + 20}
-                r="6.5"
-                fill={score.themeCategory === 'mechanical' ? '#f97316' : score.themeCategory === 'programming' ? '#3b82f6' : '#9ca3af'}
-                stroke={hoveredTheme === score.themeName ? '#000' : 'white'}
-                strokeWidth={hoveredTheme === score.themeName ? 2 : 1.5}
-                className="transition-all duration-150"
-              />
-              {/* Theme name tooltip on hover */}
-              {hoveredTheme === score.themeName && (
-                <g>
-                  <rect
-                    x={xScale(i) - 60}
-                    y={height - padding.bottom + 32}
-                    width="120"
-                    height="22"
-                    fill="black"
-                    rx="3"
-                  />
-                  <text
-                    x={xScale(i)}
-                    y={height - padding.bottom + 47}
-                    textAnchor="middle"
-                    className="text-[10px] fill-white font-bold"
-                  >
-                    {score.themeName.length > 16 ? score.themeName.slice(0, 16) + '...' : score.themeName}
-                  </text>
-                </g>
-              )}
-            </g>
-          ))}
+          {themeScores.map((score, i) => {
+            const tooltipWidth = Math.max(100, score.themeName.length * 7 + 16);
+            return (
+              <g
+                key={`label-${score.themeName}`}
+                onMouseEnter={() => setHoveredTheme(score.themeName)}
+                onMouseLeave={() => setHoveredTheme(null)}
+                style={{ cursor: 'pointer' }}
+              >
+                {/* Category indicator circle */}
+                <circle
+                  cx={xScale(i)}
+                  cy={height - padding.bottom + 15}
+                  r="5"
+                  fill={score.themeCategory === 'mechanical' ? '#f97316' : score.themeCategory === 'programming' ? '#3b82f6' : '#9ca3af'}
+                  stroke={hoveredTheme === score.themeName ? '#000' : 'white'}
+                  strokeWidth={hoveredTheme === score.themeName ? 2 : 1.5}
+                  className="transition-all duration-150"
+                />
+                {/* Theme name tooltip on hover - shows full name */}
+                {hoveredTheme === score.themeName && (
+                  <g>
+                    <rect
+                      x={xScale(i) - tooltipWidth / 2}
+                      y={height - padding.bottom + 25}
+                      width={tooltipWidth}
+                      height="18"
+                      fill="black"
+                      rx="3"
+                    />
+                    <text
+                      x={xScale(i)}
+                      y={height - padding.bottom + 38}
+                      textAnchor="middle"
+                      className="text-[9px] fill-white font-bold"
+                    >
+                      {score.themeName}
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
 
           {/* Y-axis label */}
           <text
