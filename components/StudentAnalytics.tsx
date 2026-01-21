@@ -499,7 +499,7 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
       <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
         <div>
           <h3 className="text-sm font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic">
-            Team Readiness Map
+            Comp Readiness Map
           </h3>
           <p className="text-[16px] text-gray-500 mt-1 pl-4">
             X = Mechanical | Y = Programming | Size = Overall Score
@@ -575,8 +575,8 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
             </text>
           )}
 
-          {/* X-axis labels - 20-80 range */}
-          {[20, 30, 40, 50, 60, 70, 80].map(v => (
+          {/* X-axis labels - 30-80 range */}
+          {[30, 40, 50, 60, 70, 80].map(v => (
             <text key={`x-${v}`} x={xScale(v)} y={height - padding.bottom + 25} textAnchor="middle" className="text-[14px] fill-gray-500 font-bold">
               {v}
             </text>
@@ -585,8 +585,8 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
             Mechanical Proficiency
           </text>
 
-          {/* Y-axis labels - 20-80 range */}
-          {[20, 30, 40, 50, 60, 70, 80].map(v => (
+          {/* Y-axis labels - 30-80 range */}
+          {[30, 40, 50, 60, 70, 80].map(v => (
             <text key={`y-${v}`} x={padding.left - 15} y={yScale(v) + 5} textAnchor="end" className="text-[14px] fill-gray-500 font-bold">
               {v}
             </text>
