@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import Admin from './components/Admin';
 import History from './components/History';
 import StudentSearch from './components/StudentSearch';
+import StudentAnalytics from './components/StudentAnalytics';
 import LivePublicView from './components/LivePublicView';
 import Login from './components/Login';
 
@@ -50,13 +51,21 @@ const App: React.FC = () => {
             </ProtectedRoute>
           } 
         />
-        <Route 
-          path="/history" 
+        <Route
+          path="/history"
           element={
             <ProtectedRoute>
               <Layout><History /></Layout>
             </ProtectedRoute>
-          } 
+          }
+        />
+        <Route
+          path="/analytics"
+          element={
+            <ProtectedRoute>
+              <Layout><StudentAnalytics /></Layout>
+            </ProtectedRoute>
+          }
         />
 
         {/* Redirect unknown routes back to public root */}

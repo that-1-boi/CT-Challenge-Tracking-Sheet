@@ -40,6 +40,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     { path: '/dashboard', label: 'Tracker Dashboard', icon: 'fa-edit', protected: true },
     { path: '/admin', label: 'Management', icon: 'fa-cog', protected: true },
     { path: '/history', label: 'Session History', icon: 'fa-history', protected: true },
+    { path: '/analytics', label: 'Performance Analytics', icon: 'fa-chart-line', protected: true },
   ];
 
   const handleLogout = () => {
