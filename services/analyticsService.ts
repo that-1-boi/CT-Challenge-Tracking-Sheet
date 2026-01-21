@@ -82,7 +82,8 @@ function getDifficultyLabel(meanCompletion: number): 'Very Hard' | 'Hard' | 'Mod
 
 function getDistributionBuckets(values: number[]): { bucket: string; count: number; percent: number }[] {
   const buckets = [
-    { bucket: '0-20%', min: 0, max: 20, count: 0 },
+    { bucket: '0%', min: 0, max: 0, count: 0 },
+    { bucket: '1-20%', min: 1, max: 20, count: 0 },
     { bucket: '21-40%', min: 21, max: 40, count: 0 },
     { bucket: '41-60%', min: 41, max: 60, count: 0 },
     { bucket: '61-80%', min: 61, max: 80, count: 0 },

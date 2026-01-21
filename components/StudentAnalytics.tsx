@@ -33,10 +33,13 @@ const StudentAnalytics: React.FC = () => {
 
   const filteredStudents = useMemo(() => {
     if (!analytics) return [];
-    if (!search) return analytics.studentProfiles;
-    return analytics.studentProfiles.filter(p =>
-      p.studentName.toLowerCase().includes(search.toLowerCase())
-    );
+    const profiles = search
+      ? analytics.studentProfiles.filter(p =>
+          p.studentName.toLowerCase().includes(search.toLowerCase())
+        )
+      : analytics.studentProfiles;
+    // Sort by highest curved average (overallScore) descending
+    return [...profiles].sort((a, b) => b.overallScore - a.overallScore);
   }, [analytics, search]);
 
   if (loading) {
@@ -550,13 +553,21 @@ const StudentProfileCard: React.FC<{
       <div className="bg-black p-6 text-white rounded-sm shadow-xl relative overflow-hidden border-b-8 border-[#f4c514]">
         <div className="relative z-10">
           <div className="flex items-start justify-between mb-4">
-            <div>
-              <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">{profile.studentName}</h2>
-              <div className="text-[10px] text-gray-400 font-bold uppercase mt-1">{profile.className}</div>
+            <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">{profile.studentName}</h2>
+            <div className="flex items-center gap-3">
+              {/* Domain Scores in Header */}
+              <div className="flex items-center gap-1 bg-orange-500/20 px-2 py-1 rounded">
+                <i className="fas fa-cog text-orange-400 text-xs"></i>
+                <span className="text-orange-400 font-black text-sm">{Math.round(profile.mechanicalScore)}</span>
+              </div>
+              <div className="flex items-center gap-1 bg-blue-500/20 px-2 py-1 rounded">
+                <i className="fas fa-code text-blue-400 text-xs"></i>
+                <span className="text-blue-400 font-black text-sm">{Math.round(profile.programmingScore)}</span>
+              </div>
+              <button onClick={onClose} className="text-white/30 hover:text-[#f4c514] transition-colors ml-2">
+                <i className="fas fa-times text-xl"></i>
+              </button>
             </div>
-            <button onClick={onClose} className="text-white/30 hover:text-[#f4c514] transition-colors">
-              <i className="fas fa-times text-xl"></i>
-            </button>
           </div>
 
           {/* Overall Score */}
@@ -572,7 +583,7 @@ const StudentProfileCard: React.FC<{
               ></div>
             </div>
             <div className="text-[9px] text-gray-400">
-              Percentile in class: <span className="text-white font-bold">{Math.round(profile.overallPercentile)}%</span>
+              Percentile: <span className="text-white font-bold">{Math.round(profile.overallPercentile)}%</span>
             </div>
           </div>
 
@@ -591,26 +602,6 @@ const StudentProfileCard: React.FC<{
               <div className="text-[8px] uppercase font-bold text-gray-400 tracking-widest">Raw Avg</div>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Domain Scores */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-orange-50 border border-orange-200 p-4 rounded-sm">
-          <div className="flex items-center gap-2 mb-2">
-            <i className="fas fa-cog text-orange-500"></i>
-            <span className="text-[9px] font-black uppercase text-orange-800 tracking-wider">Mechanical</span>
-          </div>
-          <div className="text-3xl font-black text-orange-600">{Math.round(profile.mechanicalScore)}</div>
-          <div className="text-[9px] text-orange-600">{profile.mechanicalThemeCount} themes</div>
-        </div>
-        <div className="bg-blue-50 border border-blue-200 p-4 rounded-sm">
-          <div className="flex items-center gap-2 mb-2">
-            <i className="fas fa-code text-blue-500"></i>
-            <span className="text-[9px] font-black uppercase text-blue-800 tracking-wider">Programming</span>
-          </div>
-          <div className="text-3xl font-black text-blue-600">{Math.round(profile.programmingScore)}</div>
-          <div className="text-[9px] text-blue-600">{profile.programmingThemeCount} themes</div>
         </div>
       </div>
 
@@ -678,8 +669,11 @@ const StudentDirectory: React.FC<{
             onClick={() => onSelect(profile)}
             className="bg-white border-2 border-slate-100 p-5 text-left rounded-sm hover:border-[#f4c514] hover:shadow-xl transition-all group"
           >
-            <h4 className="text-lg font-black uppercase italic text-black leading-tight mb-2">{profile.studentName}</h4>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-lg font-black uppercase italic text-black leading-tight">{profile.studentName}</h4>
+              <span className="text-xl font-black text-[#f4c514]">{Math.round(profile.overallScore)}</span>
+            </div>
+            <div className="flex items-center gap-2">
               <span className={`text-[8px] px-2 py-0.5 rounded font-bold uppercase ${profile.strengthClassification === 'Mechanical' ? 'bg-orange-100 text-orange-600' :
                   profile.strengthClassification === 'Programming' ? 'bg-blue-100 text-blue-600' :
                     'bg-gray-100 text-gray-600'
@@ -692,10 +686,6 @@ const StudentDirectory: React.FC<{
                 }`}>
                 {profile.growthTrend}
               </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black uppercase text-slate-400">{profile.className}</span>
-              <span className="text-xl font-black text-[#f4c514]">{Math.round(profile.overallScore)}</span>
             </div>
           </button>
         ))}
@@ -786,11 +776,12 @@ const ThemesSection: React.FC<{ themeStats: ThemeStatistics[] }> = ({ themeStats
                 {theme.distribution.map((bucket, i) => (
                   <div
                     key={bucket.bucket}
-                    className={`flex items-center justify-center text-[8px] font-bold text-white ${i === 0 ? 'bg-red-400' :
-                        i === 1 ? 'bg-orange-400' :
-                          i === 2 ? 'bg-yellow-400' :
-                            i === 3 ? 'bg-green-400' :
-                              'bg-emerald-400'
+                    className={`flex items-center justify-center text-[8px] font-bold text-white ${i === 0 ? 'bg-slate-500' :
+                        i === 1 ? 'bg-red-400' :
+                          i === 2 ? 'bg-orange-400' :
+                            i === 3 ? 'bg-yellow-400' :
+                              i === 4 ? 'bg-green-400' :
+                                'bg-emerald-400'
                       }`}
                     style={{ width: `${Math.max(bucket.percent, 5)}%` }}
                     title={`${bucket.bucket}: ${bucket.count} students (${Math.round(bucket.percent)}%)`}
@@ -798,6 +789,10 @@ const ThemesSection: React.FC<{ themeStats: ThemeStatistics[] }> = ({ themeStats
                     {bucket.count > 0 && bucket.count}
                   </div>
                 ))}
+              </div>
+              <div className="flex justify-between text-[8px] text-gray-400">
+                <span>0% (No progress)</span>
+                <span>100%</span>
               </div>
             </div>
           </div>
