@@ -539,7 +539,7 @@ export const loadHistory = async (): Promise<HistoryEntry[]> => {
     // FIX N+1: Load all themes ONCE instead of querying per row
     const { data: allThemes } = await supabase
       .from('themes')
-      .select('id, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5');
+      .select('id, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5, created_at');
 
     const themeMap = new Map(allThemes?.map(t => [t.id, t]) || []);
 
@@ -579,6 +579,7 @@ export const loadHistory = async (): Promise<HistoryEntry[]> => {
         challenges: completedChallenges,
         allAvailableChallenges: allChallenges,
         date: row.last_updated,
+        themeCreatedAt: themeData.created_at || undefined,
       });
     }
 
@@ -820,7 +821,7 @@ export const loadStudentSearchHistory = async (
     const themeIds = [...new Set((progressData as RosterViewRow[]).map(r => r.theme_id))];
     const { data: allThemes } = await supabase
       .from('themes')
-      .select('id, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5')
+      .select('id, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5, created_at')
       .in('id', themeIds);
 
     const themeMap = new Map(allThemes?.map(t => [t.id, t]) || []);
@@ -859,7 +860,8 @@ export const loadStudentSearchHistory = async (
         weekTheme: row.theme_name,
         challenges: completedChallenges,
         allAvailableChallenges: allChallenges,
-        date: row.last_updated
+        date: row.last_updated,
+        themeCreatedAt: themeData.created_at || undefined,
       });
     }
 

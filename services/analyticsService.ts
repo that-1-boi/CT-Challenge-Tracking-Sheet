@@ -122,10 +122,10 @@ async function loadRawAnalyticsData(): Promise<RawStudentThemeData[]> {
     return [];
   }
 
-  // Load theme categories
+  // Load theme categories and creation dates
   const { data: themesData, error: themesError } = await supabase
     .from('themes')
-    .select('name, category');
+    .select('name, category, created_at');
 
   if (themesError) {
     console.error('Error loading themes:', themesError);
@@ -134,6 +134,10 @@ async function loadRawAnalyticsData(): Promise<RawStudentThemeData[]> {
 
   const themeCategoryMap = new Map<string, ThemeCategory | undefined>(
     themesData?.map(t => [t.name, t.category as ThemeCategory | undefined]) || []
+  );
+
+  const themeCreatedAtMap = new Map<string, number>(
+    themesData?.map(t => [t.name, t.created_at ? new Date(t.created_at).getTime() : 0]) || []
   );
 
   // Transform roster data into raw analytics data
@@ -159,6 +163,7 @@ async function loadRawAnalyticsData(): Promise<RawStudentThemeData[]> {
       completionPercent: (challengesCompleted / 5) * 100,
       timestamp: row.last_updated ? new Date(row.last_updated).getTime() : 0,
       date: row.last_updated || '',
+      themeCreatedAt: themeCreatedAtMap.get(row.theme_name) || 0,
     });
   }
 
@@ -222,7 +227,7 @@ function calculateStudentThemeScore(
   themeStats: ThemeStatistics,
   allCompletionsInTheme: number[]
 ): StudentThemeScore {
-  const { completionPercent, challengesCompleted, themeName, themeCategory } = studentEntry;
+  const { completionPercent, challengesCompleted, themeName, themeCategory, themeCreatedAt } = studentEntry;
   const { meanCompletion, medianCompletion, standardDeviation: stdDev, difficultyWeight } = themeStats;
 
   // Z-score calculation
@@ -257,6 +262,7 @@ function calculateStudentThemeScore(
     difficultyWeight,
     weightedScore,
     percentileInTheme,
+    themeCreatedAt,
   };
 }
 
@@ -313,6 +319,9 @@ function calculateStudentProfiles(
         themeScores.push(score);
       }
     }
+
+    // Sort theme scores by theme creation date (earliest first for chronological graph display)
+    themeScores.sort((a, b) => a.themeCreatedAt - b.themeCreatedAt);
 
     // Separate by domain
     const mechanicalScores = themeScores.filter(s => s.themeCategory === 'mechanical');

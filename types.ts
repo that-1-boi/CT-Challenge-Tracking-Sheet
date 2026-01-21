@@ -45,4 +45,5 @@ export interface HistoryEntry {
   challenges: string[]; // Names of completed challenges
   allAvailableChallenges: string[]; // Names of all 5 available challenges at time of archiving
   date: string;
+  themeCreatedAt?: string; // Theme creation date for sorting by theme order
 }

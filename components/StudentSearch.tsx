@@ -36,7 +36,12 @@ const StudentSearch: React.FC = () => {
     if (!selectedStudent) return [];
     return history
       .filter(h => h.studentName === selectedStudent)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      .sort((a, b) => {
+        // Sort by theme creation date (latest themes first)
+        const aCreated = a.themeCreatedAt ? new Date(a.themeCreatedAt).getTime() : 0;
+        const bCreated = b.themeCreatedAt ? new Date(b.themeCreatedAt).getTime() : 0;
+        return bCreated - aCreated;
+      });
   }, [selectedStudent, history]);
 
   const stats = useMemo(() => {

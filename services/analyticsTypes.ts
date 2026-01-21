@@ -28,6 +28,7 @@ export interface RawStudentThemeData {
   completionPercent: number; // 0-100
   timestamp: number; // For chronological ordering
   date: string;
+  themeCreatedAt: number; // Theme creation timestamp for ordering
 }
 
 // ============================================================================
@@ -85,6 +86,9 @@ export interface StudentThemeScore {
 
   // Relative position
   percentileInTheme: number; // 0-100, position relative to all students in this theme
+
+  // Theme ordering
+  themeCreatedAt: number; // Theme creation timestamp for ordering
 }
 
 // ============================================================================
