@@ -450,10 +450,15 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
   // Point size calculation with non-linear scale
   const MIN_RADIUS = 6;
   const MAX_RADIUS = 24;
-  const SCALE_FACTOR = 0.25;
+
   const getRadius = (curvedAvg: number) => {
-    const scaled = Math.pow(curvedAvg, 2) * SCALE_FACTOR;
-    return Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, MIN_RADIUS + scaled));
+    // Normalize 40–60 → 0–1
+    const t = Math.min(1, Math.max(0, (curvedAvg - 40) / 20));
+
+    // Nonlinear scaling (quadratic)
+    const eased = t * t;
+
+    return MIN_RADIUS + eased * (MAX_RADIUS - MIN_RADIUS);
   };
 
   // Handle hover with boundary-aware tooltip positioning
