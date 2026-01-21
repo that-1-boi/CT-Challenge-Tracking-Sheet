@@ -886,11 +886,11 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
         {/* HTML tooltip - can overflow SVG bounds */}
         {hoveredTheme && (
           <div
-            className="absolute z-50 bg-black text-white text-[16px] font-bold px-1.5 py-1 rounded whitespace-nowrap pointer-events-none"
+            className="absolute z-50 bg-black text-white text-[16px] font-bold p-4 rounded pointer-events-none"
             style={{
               left: hoveredTheme.x,
               top: hoveredTheme.y,
-              transform: 'translateX(-50%, -100%)',
+              transform: 'translateX(-50%)',
             }}
           >
             {hoveredTheme.name}
