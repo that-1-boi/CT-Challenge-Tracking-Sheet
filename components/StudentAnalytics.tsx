@@ -432,12 +432,12 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
   const graphWidth = width - padding.left - padding.right;
   const graphHeight = height - padding.top - padding.bottom;
 
-  // Axis range: 20-80 (instead of 0-100)
-  const AXIS_MIN = 20;
+  // Axis range: 30-80 (instead of 0-100)
+  const AXIS_MIN = 30;
   const AXIS_MAX = 80;
   const AXIS_RANGE = AXIS_MAX - AXIS_MIN;
 
-  // Fixed axes: 20-80 for both
+  // Fixed axes: 30-80 for both
   const xScale = (value: number) => {
     const clamped = Math.max(AXIS_MIN, Math.min(AXIS_MAX, value));
     return padding.left + ((clamped - AXIS_MIN) / AXIS_RANGE) * graphWidth;
