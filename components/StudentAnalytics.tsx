@@ -908,7 +908,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
 
       {/* Detailed data table */}
       <div className="mt-6 overflow-x-auto">
-        <table className="w-full text-[10px]">
+        <table className="w-full text-[16px]">
           <thead>
             <tr className="border-b border-slate-200">
               <th className="text-left py-2 font-black uppercase text-gray-500">Theme</th>
