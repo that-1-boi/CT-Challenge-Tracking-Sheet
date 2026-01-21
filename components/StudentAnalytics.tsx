@@ -314,7 +314,22 @@ const StatCard: React.FC<{
 // ============================================================================
 
 const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ themeScores }) => {
-  const [hoveredTheme, setHoveredTheme] = useState<string | null>(null);
+  const [hoveredTheme, setHoveredTheme] = useState<{ name: string; x: number; y: number } | null>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Handle mouse enter on theme indicator circles
+  const handleThemeHover = (themeName: string, event: React.MouseEvent<SVGCircleElement>) => {
+    if (!containerRef.current) return;
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const circleRect = event.currentTarget.getBoundingClientRect();
+
+    // Calculate position relative to the container
+    const x = circleRect.left + circleRect.width / 2 - containerRect.left;
+    const y = circleRect.bottom - containerRect.top + 8; // 8px below the circle
+
+    setHoveredTheme({ name: themeName, x, y });
+  };
 
   if (themeScores.length === 0) {
     return (
@@ -382,7 +397,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto relative" ref={containerRef}>
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[560px]" style={{ minHeight: '224px' }}>
           {/* Grid lines */}
           {[0, 25, 50, 75, 100].map(v => (
@@ -464,50 +479,20 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
           ))}
 
           {/* X-axis theme indicators with hover tooltips */}
-          {themeScores.map((score, i) => {
-            // Dynamic tooltip width: 6px padding on each side + text width (~5px per char for small font)
-            const tooltipWidth = score.themeName.length * 5 + 12;
-            return (
-              <g
-                key={`label-${score.themeName}`}
-                onMouseEnter={() => setHoveredTheme(score.themeName)}
-                onMouseLeave={() => setHoveredTheme(null)}
-                style={{ cursor: 'pointer' }}
-              >
-                {/* Category indicator circle */}
-                <circle
-                  cx={xScale(i)}
-                  cy={height - padding.bottom + 15}
-                  r="5"
-                  fill={score.themeCategory === 'mechanical' ? '#f97316' : score.themeCategory === 'programming' ? '#3b82f6' : '#9ca3af'}
-                  stroke={hoveredTheme === score.themeName ? '#000' : 'white'}
-                  strokeWidth={hoveredTheme === score.themeName ? 2 : 1.5}
-                  className="transition-all duration-150"
-                />
-                {/* Theme name tooltip on hover - compact with 6px padding */}
-                {hoveredTheme === score.themeName && (
-                  <g>
-                    <rect
-                      x={xScale(i) - tooltipWidth / 2}
-                      y={height - padding.bottom + 24}
-                      width={tooltipWidth}
-                      height="14"
-                      fill="black"
-                      rx="2"
-                    />
-                    <text
-                      x={xScale(i)}
-                      y={height - padding.bottom + 34}
-                      textAnchor="middle"
-                      className="text-[8px] fill-white font-bold"
-                    >
-                      {score.themeName}
-                    </text>
-                  </g>
-                )}
-              </g>
-            );
-          })}
+          {themeScores.map((score, i) => (
+            <circle
+              key={`label-${score.themeName}`}
+              cx={xScale(i)}
+              cy={height - padding.bottom + 15}
+              r="5"
+              fill={score.themeCategory === 'mechanical' ? '#f97316' : score.themeCategory === 'programming' ? '#3b82f6' : '#9ca3af'}
+              stroke={hoveredTheme?.name === score.themeName ? '#000' : 'white'}
+              strokeWidth={hoveredTheme?.name === score.themeName ? 2 : 1.5}
+              className="transition-all duration-150 cursor-pointer"
+              onMouseEnter={(e) => handleThemeHover(score.themeName, e)}
+              onMouseLeave={() => setHoveredTheme(null)}
+            />
+          ))}
 
           {/* Y-axis label - aligned with graph left edge */}
           <text
@@ -520,6 +505,20 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             Score / Completion %
           </text>
         </svg>
+
+        {/* HTML tooltip - can overflow SVG bounds */}
+        {hoveredTheme && (
+          <div
+            className="absolute z-50 bg-black text-white text-[8px] font-bold px-1.5 py-1 rounded whitespace-nowrap pointer-events-none"
+            style={{
+              left: hoveredTheme.x,
+              top: hoveredTheme.y,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            {hoveredTheme.name}
+          </div>
+        )}
       </div>
 
       {/* Detailed data table */}
