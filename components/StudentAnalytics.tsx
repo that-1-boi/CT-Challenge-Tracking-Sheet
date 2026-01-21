@@ -368,7 +368,7 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
   const competitionPool = useMemo(() => {
     if (profiles.length < 5) return [];
     const sorted = [...profiles].sort((a, b) => b.overallScore - a.overallScore);
-    const topCount = Math.max(3, Math.ceil(profiles.length * 0.22)); // ~18% = between 15-20%
+    const topCount = Math.max(3, Math.ceil(profiles.length * 0.20)); // ~18% = between 15-20%
     return sorted.slice(0, topCount);
   }, [profiles]);
 
