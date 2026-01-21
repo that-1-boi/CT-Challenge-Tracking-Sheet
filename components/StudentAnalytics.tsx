@@ -452,7 +452,7 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
   const MAX_RADIUS = 24;
   const SCALE_FACTOR = 0.25;
   const getRadius = (curvedAvg: number) => {
-    const scaled = Math.pow(curvedAvg, 1.4) * SCALE_FACTOR;
+    const scaled = Math.pow(curvedAvg, 2) * SCALE_FACTOR;
     return Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, MIN_RADIUS + scaled));
   };
 
