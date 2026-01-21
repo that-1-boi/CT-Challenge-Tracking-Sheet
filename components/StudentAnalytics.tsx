@@ -103,9 +103,9 @@ const StudentAnalytics: React.FC = () => {
 
       {/* Students View */}
       {viewMode === 'students' && (
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Search Column */}
-          <div className="w-full lg:w-1/3 space-y-4">
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Search Column - narrower */}
+          <div className="w-full lg:w-56 xl:w-64 shrink-0 space-y-3">
             <div className="relative">
               <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
               <input
@@ -137,31 +137,23 @@ const StudentAnalytics: React.FC = () => {
               )}
             </div>
 
-            {/* Desktop list */}
-            <div className="hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[600px] overflow-y-auto shadow-sm">
+            {/* Desktop list - compact */}
+            <div className="hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[500px] overflow-y-auto shadow-sm">
               {filteredStudents.length > 0 ? (
                 filteredStudents.map(profile => (
                   <button
                     key={profile.studentId}
                     onClick={() => setSelectedStudent(profile)}
-                    className={`w-full text-left p-3 font-black uppercase text-xs hover:bg-[#f4c514] transition-colors flex items-center justify-between group ${selectedStudent?.studentId === profile.studentId ? 'bg-[#f4c514]' : ''
+                    className={`w-full text-left px-2 py-2 font-black uppercase text-[10px] hover:bg-[#f4c514] transition-colors flex items-center justify-between gap-1 ${selectedStudent?.studentId === profile.studentId ? 'bg-[#f4c514]' : ''
                       }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <span>{profile.studentName}</span>
-                      <span className={`text-[8px] px-1.5 py-0.5 rounded ${profile.strengthClassification === 'Mechanical' ? 'bg-orange-100 text-orange-600' :
-                          profile.strengthClassification === 'Programming' ? 'bg-blue-100 text-blue-600' :
-                            'bg-gray-100 text-gray-600'
-                        }`}>
-                        {profile.strengthClassification}
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-bold text-gray-400">{Math.round(profile.overallScore)}</span>
+                    <span className="truncate">{profile.studentName}</span>
+                    <span className="text-[9px] font-bold text-gray-400 shrink-0">{Math.round(profile.overallScore)}</span>
                   </button>
                 ))
               ) : (
-                <div className="p-12 text-center text-gray-400 italic text-[10px] uppercase tracking-widest">
-                  No matches found
+                <div className="p-8 text-center text-gray-400 italic text-[9px] uppercase tracking-widest">
+                  No matches
                 </div>
               )}
             </div>
@@ -327,9 +319,9 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
     );
   }
 
-  const width = 800;
-  const height = 300;
-  const padding = { top: 30, right: 30, bottom: 60, left: 50 };
+  const width = 900;
+  const height = 400;
+  const padding = { top: 40, right: 40, bottom: 80, left: 60 };
   const graphWidth = width - padding.left - padding.right;
   const graphHeight = height - padding.top - padding.bottom;
 
@@ -359,33 +351,33 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
   const curvedPath = createLinePath(themeScores.map(s => s.curvedScore), yScaleCurved);
 
   return (
-    <div className="bg-white border border-slate-200 p-4 rounded-sm">
-      <h3 className="text-xs font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic mb-4">
+    <div className="bg-white border-2 border-slate-200 p-6 rounded-sm">
+      <h3 className="text-sm font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic mb-6">
         Performance Across Themes
       </h3>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-4 mb-4 text-[9px] font-bold">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-0.5 bg-[#f4c514]"></div>
-          <span>Student Raw %</span>
+      {/* Legend - more prominent */}
+      <div className="flex flex-wrap gap-6 mb-6 p-4 bg-slate-50 rounded-sm border border-slate-200">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-1 bg-[#f4c514] rounded"></div>
+          <span className="text-xs font-black text-gray-700">Student Raw %</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-0.5 bg-gray-400" style={{ strokeDasharray: '4,4' }}></div>
-          <span>Class Mean</span>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-0.5 bg-gray-400 border-dashed border-t-2 border-gray-400"></div>
+          <span className="text-xs font-bold text-gray-500">Class Mean</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-0.5 bg-blue-400"></div>
-          <span>Class Median</span>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-1 bg-blue-400 rounded"></div>
+          <span className="text-xs font-bold text-blue-600">Class Median</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-0.5 bg-green-500"></div>
-          <span>Curved Score</span>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-1 bg-green-500 rounded"></div>
+          <span className="text-xs font-bold text-green-600">Curved Score</span>
         </div>
       </div>
 
       <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[600px]" style={{ maxHeight: '350px' }}>
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[700px]" style={{ minHeight: '400px' }}>
           {/* Grid lines */}
           {[0, 25, 50, 75, 100].map(v => (
             <g key={v}>
@@ -413,8 +405,8 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             d={meanPath}
             fill="none"
             stroke="#9ca3af"
-            strokeWidth="2"
-            strokeDasharray="6,4"
+            strokeWidth="2.5"
+            strokeDasharray="8,5"
           />
 
           {/* Class Median line (blue) */}
@@ -422,7 +414,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             d={medianPath}
             fill="none"
             stroke="#60a5fa"
-            strokeWidth="2"
+            strokeWidth="2.5"
           />
 
           {/* Curved Score line (green) */}
@@ -430,7 +422,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             d={curvedPath}
             fill="none"
             stroke="#22c55e"
-            strokeWidth="2.5"
+            strokeWidth="3"
           />
 
           {/* Student Raw line (yellow/gold - main line) */}
@@ -438,7 +430,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
             d={rawPath}
             fill="none"
             stroke="#f4c514"
-            strokeWidth="3"
+            strokeWidth="4"
           />
 
           {/* Data points for student raw */}
@@ -448,7 +440,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
               <circle
                 cx={xScale(i)}
                 cy={yScaleRaw(score.rawCompletion)}
-                r="5"
+                r="7"
                 fill="#f4c514"
                 stroke="white"
                 strokeWidth="2"
@@ -457,10 +449,10 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
               <circle
                 cx={xScale(i)}
                 cy={yScaleCurved(score.curvedScore)}
-                r="4"
+                r="5"
                 fill="#22c55e"
                 stroke="white"
-                strokeWidth="1.5"
+                strokeWidth="2"
               />
             </g>
           ))}
@@ -481,8 +473,8 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
               {score.themeCategory && (
                 <circle
                   cx={xScale(i)}
-                  cy={height - padding.bottom + 45}
-                  r="4"
+                  cy={height - padding.bottom + 55}
+                  r="5"
                   fill={score.themeCategory === 'mechanical' ? '#f97316' : '#3b82f6'}
                 />
               )}
@@ -491,11 +483,11 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
 
           {/* Y-axis label */}
           <text
-            x={15}
+            x={20}
             y={height / 2}
             textAnchor="middle"
-            transform={`rotate(-90, 15, ${height / 2})`}
-            className="text-[10px] fill-gray-500 font-bold"
+            transform={`rotate(-90, 20, ${height / 2})`}
+            className="text-[12px] fill-gray-500 font-bold"
           >
             Score / Completion %
           </text>
@@ -503,8 +495,8 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
       </div>
 
       {/* Detailed data table */}
-      <div className="mt-4 overflow-x-auto">
-        <table className="w-full text-[9px]">
+      <div className="mt-6 overflow-x-auto">
+        <table className="w-full text-[10px]">
           <thead>
             <tr className="border-b border-slate-200">
               <th className="text-left py-2 font-black uppercase text-gray-500">Theme</th>
