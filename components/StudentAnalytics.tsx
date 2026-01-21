@@ -465,7 +465,7 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
 
           {/* X-axis theme indicators with hover tooltips */}
           {themeScores.map((score, i) => {
-            const tooltipWidth = Math.max(100, score.themeName.length * 7);
+            const tooltipWidth = Math.max(100, score.themeName.length * 2);
             return (
               <g
                 key={`label-${score.themeName}`}
