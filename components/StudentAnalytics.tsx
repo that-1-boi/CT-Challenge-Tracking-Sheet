@@ -8,6 +8,350 @@ import {
 } from '../services/analyticsTypes';
 import { subscribeSyncEvent } from '../services/syncEvents';
 
+// ============================================================================
+// STUDENT ATTRIBUTES TYPES AND STORAGE
+// ============================================================================
+
+interface StudentAttribute {
+  name: string;
+  value: number; // 0-100 scale
+}
+
+interface StudentCustomData {
+  attributes: StudentAttribute[];
+  notes: string;
+}
+
+// Default attributes for new students (starts with 3 for proper radar display, expandable to 8)
+// Note: Radar charts require minimum 3 points to form a polygon
+const DEFAULT_ATTRIBUTES: StudentAttribute[] = [
+  { name: 'Teamwork', value: 50 },
+  { name: 'Problem Solving', value: 50 },
+  { name: 'Communication', value: 50 },
+];
+
+// LocalStorage key for student custom data
+const STUDENT_DATA_KEY = 'ct_student_custom_data';
+
+function loadStudentCustomData(): Record<string, StudentCustomData> {
+  try {
+    const stored = localStorage.getItem(STUDENT_DATA_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveStudentCustomData(data: Record<string, StudentCustomData>): void {
+  try {
+    localStorage.setItem(STUDENT_DATA_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error('Error saving student custom data:', error);
+  }
+}
+
+function getStudentData(studentId: string): StudentCustomData {
+  const allData = loadStudentCustomData();
+  return allData[studentId] || { attributes: [...DEFAULT_ATTRIBUTES], notes: '' };
+}
+
+function updateStudentData(studentId: string, data: Partial<StudentCustomData>): void {
+  const allData = loadStudentCustomData();
+  const current = allData[studentId] || { attributes: [...DEFAULT_ATTRIBUTES], notes: '' };
+  allData[studentId] = { ...current, ...data };
+  saveStudentCustomData(allData);
+}
+
+// ============================================================================
+// DYNAMIC RADAR CHART COMPONENT (supports 3-8 attributes)
+// ============================================================================
+
+interface RadarChartProps {
+  attributes: StudentAttribute[];
+  onAttributeChange: (index: number, value: number) => void;
+  onAttributeNameChange: (index: number, name: string) => void;
+  onAddAttribute: () => void;
+  onRemoveAttribute: (index: number) => void;
+  editable?: boolean;
+}
+
+const RadarChart: React.FC<RadarChartProps> = ({
+  attributes,
+  onAttributeChange,
+  onAttributeNameChange,
+  onAddAttribute,
+  onRemoveAttribute,
+  editable = true,
+}) => {
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState('');
+
+  // Chart dimensions
+  const size = 280;
+  const center = size / 2;
+  const maxRadius = 100;
+  const levels = 5; // Number of concentric rings
+
+  // Calculate points for polygon
+  const getPoint = (index: number, value: number, total: number) => {
+    const angle = (Math.PI * 2 * index) / total - Math.PI / 2; // Start from top
+    const radius = (value / 100) * maxRadius;
+    return {
+      x: center + radius * Math.cos(angle),
+      y: center + radius * Math.sin(angle),
+    };
+  };
+
+  // Generate polygon points string
+  const polygonPoints = attributes
+    .map((attr, i) => {
+      const point = getPoint(i, attr.value, attributes.length);
+      return `${point.x},${point.y}`;
+    })
+    .join(' ');
+
+  // Generate level rings
+  const levelRings = Array.from({ length: levels }, (_, i) => {
+    const levelValue = ((i + 1) / levels) * 100;
+    return attributes
+      .map((_, attrIndex) => {
+        const point = getPoint(attrIndex, levelValue, attributes.length);
+        return `${point.x},${point.y}`;
+      })
+      .join(' ');
+  });
+
+  // Handle name edit
+  const startEditingName = (index: number) => {
+    if (!editable) return;
+    setEditingIndex(index);
+    setEditingName(attributes[index].name);
+  };
+
+  const finishEditingName = () => {
+    if (editingIndex !== null && editingName.trim()) {
+      onAttributeNameChange(editingIndex, editingName.trim());
+    }
+    setEditingIndex(null);
+    setEditingName('');
+  };
+
+  const canAddMore = attributes.length < 8;
+  const canRemove = attributes.length > 3;
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg width={size} height={size} className="overflow-visible">
+        {/* Background rings */}
+        {levelRings.map((points, i) => (
+          <polygon
+            key={`level-${i}`}
+            points={points}
+            fill="none"
+            stroke="#e5e7eb"
+            strokeWidth="1"
+          />
+        ))}
+
+        {/* Axis lines */}
+        {attributes.map((_, i) => {
+          const point = getPoint(i, 100, attributes.length);
+          return (
+            <line
+              key={`axis-${i}`}
+              x1={center}
+              y1={center}
+              x2={point.x}
+              y2={point.y}
+              stroke="#d1d5db"
+              strokeWidth="1"
+            />
+          );
+        })}
+
+        {/* Data polygon */}
+        <polygon
+          points={polygonPoints}
+          fill="#f4c514"
+          fillOpacity="0.3"
+          stroke="#f4c514"
+          strokeWidth="2"
+        />
+
+        {/* Data points */}
+        {attributes.map((attr, i) => {
+          const point = getPoint(i, attr.value, attributes.length);
+          return (
+            <circle
+              key={`point-${i}`}
+              cx={point.x}
+              cy={point.y}
+              r="6"
+              fill="#f4c514"
+              stroke="white"
+              strokeWidth="2"
+              className="cursor-pointer hover:r-8 transition-all"
+            />
+          );
+        })}
+
+        {/* Labels */}
+        {attributes.map((attr, i) => {
+          const labelPoint = getPoint(i, 125, attributes.length);
+          const isEditing = editingIndex === i;
+
+          return (
+            <g key={`label-${i}`}>
+              {isEditing ? (
+                <foreignObject
+                  x={labelPoint.x - 50}
+                  y={labelPoint.y - 12}
+                  width="100"
+                  height="24"
+                >
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onBlur={finishEditingName}
+                    onKeyDown={(e) => e.key === 'Enter' && finishEditingName()}
+                    autoFocus
+                    className="w-full text-[10px] font-bold text-center bg-white border border-[#f4c514] rounded px-1 py-0.5 outline-none"
+                  />
+                </foreignObject>
+              ) : (
+                <text
+                  x={labelPoint.x}
+                  y={labelPoint.y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className={`text-[10px] font-black uppercase fill-gray-700 ${editable ? 'cursor-pointer hover:fill-[#f4c514]' : ''}`}
+                  onClick={() => startEditingName(i)}
+                >
+                  {attr.name}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Attribute sliders */}
+      {editable && (
+        <div className="w-full mt-4 space-y-2">
+          {attributes.map((attr, i) => (
+            <div key={`slider-${i}`} className="flex items-center gap-2">
+              <span className="text-[9px] font-bold text-gray-500 w-24 truncate uppercase">{attr.name}</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={attr.value}
+                onChange={(e) => onAttributeChange(i, parseInt(e.target.value))}
+                className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#f4c514]"
+              />
+              <span className="text-[10px] font-black text-[#f4c514] w-8 text-right">{attr.value}</span>
+              {canRemove && (
+                <button
+                  onClick={() => onRemoveAttribute(i)}
+                  className="text-gray-400 hover:text-red-500 transition-colors"
+                  title="Remove attribute"
+                >
+                  <i className="fas fa-times text-[10px]"></i>
+                </button>
+              )}
+            </div>
+          ))}
+
+          {canAddMore && (
+            <button
+              onClick={onAddAttribute}
+              className="w-full mt-2 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-500 border border-dashed border-gray-300 rounded hover:border-[#f4c514] hover:text-[#f4c514] transition-colors"
+            >
+              <i className="fas fa-plus mr-1"></i> Add Attribute ({attributes.length}/8)
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================================================
+// EDITABLE NOTES COMPONENT
+// ============================================================================
+
+interface NotesEditorProps {
+  notes: string;
+  onNotesChange: (notes: string) => void;
+}
+
+const NotesEditor: React.FC<NotesEditorProps> = ({ notes, onNotesChange }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [localNotes, setLocalNotes] = useState(notes);
+
+  useEffect(() => {
+    setLocalNotes(notes);
+  }, [notes]);
+
+  const handleSave = () => {
+    onNotesChange(localNotes);
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-[10px] font-black uppercase text-gray-500 tracking-widest">
+          <i className="fas fa-sticky-note mr-1 text-[#f4c514]"></i> Notes
+        </h4>
+        {!isEditing && (
+          <button
+            onClick={() => setIsEditing(true)}
+            className="text-[9px] font-bold text-gray-400 hover:text-[#f4c514] transition-colors"
+          >
+            <i className="fas fa-edit mr-1"></i> Edit
+          </button>
+        )}
+      </div>
+
+      {isEditing ? (
+        <div className="space-y-2">
+          <textarea
+            value={localNotes}
+            onChange={(e) => setLocalNotes(e.target.value)}
+            placeholder="Add notes about this student..."
+            className="w-full h-24 p-3 text-[11px] bg-white border border-[#ffe5a0] rounded-sm resize-none focus:outline-none focus:border-[#f4c514]"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => {
+                setLocalNotes(notes);
+                setIsEditing(false);
+              }}
+              className="px-3 py-1 text-[9px] font-bold text-gray-500 hover:text-gray-700"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-3 py-1 text-[9px] font-black uppercase bg-[#f4c514] text-black rounded-sm hover:bg-black hover:text-[#f4c514] transition-colors"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className={`p-3 text-[11px] bg-white border border-[#ffe5a0] rounded-sm min-h-[60px] ${notes ? 'text-gray-700' : 'text-gray-400 italic'}`}
+        >
+          {notes || 'No notes yet. Click edit to add notes.'}
+        </div>
+      )}
+    </div>
+  );
+};
+
 type ViewMode = 'overview' | 'students' | 'themes';
 
 const StudentAnalytics: React.FC = () => {
@@ -973,6 +1317,55 @@ const StudentProfileCard: React.FC<{
   profile: StudentProfile;
   onClose: () => void;
 }> = ({ profile, onClose }) => {
+  // Load and manage student custom data (attributes + notes)
+  const [customData, setCustomData] = useState<StudentCustomData>(() =>
+    getStudentData(profile.studentId)
+  );
+
+  // Update customData when profile changes
+  useEffect(() => {
+    setCustomData(getStudentData(profile.studentId));
+  }, [profile.studentId]);
+
+  // Attribute handlers
+  const handleAttributeChange = (index: number, value: number) => {
+    const newAttributes = [...customData.attributes];
+    newAttributes[index] = { ...newAttributes[index], value };
+    const newData = { ...customData, attributes: newAttributes };
+    setCustomData(newData);
+    updateStudentData(profile.studentId, newData);
+  };
+
+  const handleAttributeNameChange = (index: number, name: string) => {
+    const newAttributes = [...customData.attributes];
+    newAttributes[index] = { ...newAttributes[index], name };
+    const newData = { ...customData, attributes: newAttributes };
+    setCustomData(newData);
+    updateStudentData(profile.studentId, newData);
+  };
+
+  const handleAddAttribute = () => {
+    if (customData.attributes.length >= 8) return;
+    const newAttributes = [...customData.attributes, { name: `Skill ${customData.attributes.length + 1}`, value: 50 }];
+    const newData = { ...customData, attributes: newAttributes };
+    setCustomData(newData);
+    updateStudentData(profile.studentId, newData);
+  };
+
+  const handleRemoveAttribute = (index: number) => {
+    if (customData.attributes.length <= 3) return;
+    const newAttributes = customData.attributes.filter((_, i) => i !== index);
+    const newData = { ...customData, attributes: newAttributes };
+    setCustomData(newData);
+    updateStudentData(profile.studentId, newData);
+  };
+
+  const handleNotesChange = (notes: string) => {
+    const newData = { ...customData, notes };
+    setCustomData(newData);
+    updateStudentData(profile.studentId, newData);
+  };
+
   return (
     <div className="animate-in slide-in-from-right-4 duration-300 space-y-6">
       {/* Header */}
@@ -1067,8 +1460,28 @@ const StudentProfileCard: React.FC<{
         </div>
       </div>
 
-      {/* Performance Line Graph */}
-      <PerformanceLineGraph themeScores={profile.themeScores} />
+      {/* Radar Chart + Performance Line Graph - Side by Side */}
+      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6">
+        {/* Radar Chart Section */}
+        <div className="bg-[#fff1d1] border border-[#ffe5a0] p-5 rounded-sm">
+          <h3 className="text-xs font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic mb-4">
+            Student Attributes
+          </h3>
+          <RadarChart
+            attributes={customData.attributes}
+            onAttributeChange={handleAttributeChange}
+            onAttributeNameChange={handleAttributeNameChange}
+            onAddAttribute={handleAddAttribute}
+            onRemoveAttribute={handleRemoveAttribute}
+            editable={true}
+          />
+          {/* Notes Section */}
+          <NotesEditor notes={customData.notes} onNotesChange={handleNotesChange} />
+        </div>
+
+        {/* Performance Line Graph */}
+        <PerformanceLineGraph themeScores={profile.themeScores} />
+      </div>
     </div>
   );
 };
