@@ -1,22 +1,87 @@
-
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { loadHistory } from '../services/storageService';
 import { HistoryEntry } from '../types';
+import { subscribeSyncEvent, CACHE_KEYS, getLastSyncTimestamp } from '../services/syncEvents';
+
+// Cache history data in localStorage to prevent excessive reads
+const HISTORY_CACHE_KEY = CACHE_KEYS.HISTORY;
+const HISTORY_TIMESTAMP_KEY = CACHE_KEYS.HISTORY_TIMESTAMP;
+
+function getCachedHistory(): HistoryEntry[] | null {
+  try {
+    const cached = localStorage.getItem(HISTORY_CACHE_KEY);
+    const timestamp = localStorage.getItem(HISTORY_TIMESTAMP_KEY);
+    if (!cached || !timestamp) return null;
+
+    const cacheTime = parseInt(timestamp, 10);
+    const lastSync = getLastSyncTimestamp();
+
+    // If a sync happened after caching, invalidate
+    if (lastSync && lastSync > cacheTime) {
+      console.log('StudentSearch: Cache invalidated by recent sync');
+      return null;
+    }
+
+    console.log('StudentSearch: Using cached history data');
+    return JSON.parse(cached);
+  } catch {
+    return null;
+  }
+}
+
+function setCachedHistory(data: HistoryEntry[]): void {
+  try {
+    localStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(HISTORY_TIMESTAMP_KEY, Date.now().toString());
+    console.log('StudentSearch: History cached');
+  } catch (error) {
+    console.error('Error caching history:', error);
+  }
+}
 
 const StudentSearch: React.FC = () => {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    loadHistory().then(loadedHistory => {
+  // Load history - checks cache first, only fetches from DB if needed
+  const loadHistoryData = useCallback(async (forceRefresh = false) => {
+    // Check cache first (unless forcing refresh)
+    if (!forceRefresh) {
+      const cached = getCachedHistory();
+      if (cached) {
+        setHistory(cached);
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Fetch from database
+    console.log('StudentSearch: Loading history from database...');
+    try {
+      const loadedHistory = await loadHistory();
       setHistory(loadedHistory);
+      setCachedHistory(loadedHistory);
       setLoading(false);
-    }).catch(error => {
+    } catch (error) {
       console.error('Error loading history:', error);
       setLoading(false);
-    });
+    }
   }, []);
+
+  // Initial load
+  useEffect(() => {
+    loadHistoryData();
+  }, [loadHistoryData]);
+
+  // Listen for sync events to refresh data
+  useEffect(() => {
+    const unsubscribe = subscribeSyncEvent(() => {
+      console.log('StudentSearch: Sync event received, refreshing data...');
+      loadHistoryData(true); // Force refresh from DB
+    });
+    return unsubscribe;
+  }, [loadHistoryData]);
 
   const allStudents = useMemo(() => {
     return Array.from(new Set(history.map(h => h.studentName))).sort();

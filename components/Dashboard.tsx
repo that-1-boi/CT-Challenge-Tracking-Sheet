@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, HistoryEntry, StudentProgress } from '../types';
-import { loadState, saveState, loadHistory, updateStudentProgress } from '../services/storageService';
+import { loadState, saveState, loadHistory } from '../services/storageService';
+import { dispatchSyncEvent, setLastSyncTimestamp } from '../services/syncEvents';
 
 const Dashboard: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const isInitialLoad = useRef(true);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const skipNextAutoSave = useRef(false); // Skip auto-save after immediate progress save
+  const stateRef = useRef<AppState | null>(null); // For beforeunload access
 
   // Load state and history from database on mount
   useEffect(() => {
@@ -37,39 +38,53 @@ const Dashboard: React.FC = () => {
     });
   }, []);
 
-  // Save state to database when it changes (debounced)
-  // Skip auto-save when we've just done an immediate progress save to avoid race conditions
+  // Keep stateRef in sync for beforeunload handler
   useEffect(() => {
-    if (isInitialLoad.current || !state) {
-      return;
+    stateRef.current = state;
+  }, [state]);
+
+  // Manual sync function - only saves when explicitly called
+  const syncToCloud = useCallback(async () => {
+    if (!state || !hasUnsavedChanges) return;
+
+    setSaveStatus('saving');
+    try {
+      await saveState(state);
+      setHasUnsavedChanges(false);
+      setSaveStatus('saved');
+      console.log('Dashboard: State synced to cloud successfully');
+
+      // Record sync timestamp and notify other components
+      setLastSyncTimestamp();
+      dispatchSyncEvent();
+
+      // Refresh history after sync
+      const refreshedHistory = await loadHistory();
+      setHistory(refreshedHistory);
+    } catch (error) {
+      console.error('Dashboard: Error syncing state:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('saved'), 3000);
     }
+  }, [state, hasUnsavedChanges]);
 
-    // Skip this auto-save if we just did an immediate save
-    if (skipNextAutoSave.current) {
-      console.log('Dashboard: Skipping auto-save (immediate save already done)');
-      skipNextAutoSave.current = false;
-      return;
-    }
+  // Auto-sync on page unload to prevent data loss
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges && stateRef.current) {
+        // Attempt to save (note: async operations may not complete)
+        saveState(stateRef.current).catch(console.error);
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    saveTimeoutRef.current = setTimeout(() => {
-      console.log('Dashboard: Saving state to database...');
-      saveState(state).then(() => {
-        console.log('Dashboard: State saved successfully');
-      }).catch(error => {
-        console.error('Dashboard: Error saving state:', error);
-      });
-    }, 500);
-
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
+        // Show browser warning
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return e.returnValue;
       }
     };
-  }, [state]);
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   const activeTheme = state?.themes.find(t => t.name === state.currentWeekTheme);
   const realClasses = activeTheme?.classes.filter(c => c.id !== 'unassigned') || [];
@@ -107,7 +122,7 @@ const Dashboard: React.FC = () => {
     return { challenges: [], timestamp: 0 };
   };
 
-  const toggleChallenge = async (studentName: string, challengeIdx: number) => {
+  const toggleChallenge = (studentName: string, challengeIdx: number) => {
     if (!currentClass || !state || !activeTheme) return;
 
     const challengeId = `c${challengeIdx + 1}`;
@@ -122,67 +137,33 @@ const Dashboard: React.FC = () => {
       ? currentProgress.challenges.filter(id => id !== challengeId)
       : [...currentProgress.challenges, challengeId];
 
-    console.log('Dashboard: Toggling challenge', {
+    console.log('Dashboard: Toggling challenge (local only)', {
       studentName,
       challengeId,
       wasCompleted: isCompleted,
       newChallenges: updatedChallenges
     });
 
-    // Set saving status
-    setSaveStatus('saving');
-
-    try {
-      // Immediately save to database (don't wait for debounced auto-save)
-      await updateStudentProgress(
-        currentClass.id,
-        student.id,
-        state.currentWeekTheme,
-        updatedChallenges
-      );
-
-      // Skip the next auto-save since we just saved immediately
-      // This prevents race conditions where debounced save could overwrite
-      skipNextAutoSave.current = true;
-
-      // Update state.progress for UI reactivity
-      const progressKey = `${currentClass.id}_${student.id}_${state.currentWeekTheme}`;
-      setState(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          progress: {
-            ...prev.progress,
-            [progressKey]: {
-              studentId: student.id,
-              studentName: studentName,
-              challengesCompleted: updatedChallenges,
-              timestamp: Date.now(),
-            }
+    // Update state.progress for UI reactivity (local only - no DB write)
+    const progressKey = `${currentClass.id}_${student.id}_${state.currentWeekTheme}`;
+    setState(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        progress: {
+          ...prev.progress,
+          [progressKey]: {
+            studentId: student.id,
+            studentName: studentName,
+            challengesCompleted: updatedChallenges,
+            timestamp: Date.now(),
           }
-        };
-      });
+        }
+      };
+    });
 
-      // Set saved status
-      setSaveStatus('saved');
-
-      // Refresh history after a short delay to show updated progress
-      setTimeout(() => {
-        loadHistory().then(refreshedHistory => {
-          setHistory(refreshedHistory);
-        }).catch(error => {
-          console.error('Dashboard: Error refreshing history:', error);
-        });
-      }, 500);
-    } catch (error) {
-      console.error('Dashboard: Error saving progress:', error);
-      setSaveStatus('error');
-
-      // Reset error status after 3 seconds
-      setTimeout(() => {
-        setSaveStatus('saved');
-      }, 3000);
-    }
+    // Mark as having unsaved changes
+    setHasUnsavedChanges(true);
   };
 
   if (loading) {
@@ -214,27 +195,38 @@ const Dashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-2 landscape-phone:mb-2 sm:mb-8 gap-1 landscape-phone:gap-1 sm:gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
-            {/* Save Status Indicator */}
-            <div className="flex items-center gap-1 sm:gap-2">
-              {saveStatus === 'saving' && (
+            {/* Sync Button & Status Indicator */}
+            <button
+              onClick={syncToCloud}
+              disabled={!hasUnsavedChanges || saveStatus === 'saving'}
+              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-sm text-[7px] sm:text-[8px] font-black uppercase tracking-widest transition-all ${
+                hasUnsavedChanges
+                  ? 'bg-[#f4c514] text-black hover:bg-black hover:text-[#f4c514] cursor-pointer'
+                  : 'bg-green-600 text-white cursor-default'
+              } ${saveStatus === 'saving' ? 'opacity-50 cursor-wait' : ''}`}
+            >
+              {saveStatus === 'saving' ? (
                 <>
-                  <div className="w-1.5 h-1.5 border border-[#f4c514] border-t-transparent rounded-full animate-spin"></div>
-                  <span className="bg-black text-[#f4c514] text-[7px] sm:text-[8px] font-black px-1 sm:px-1.5 py-0.5 rounded-sm tracking-widest uppercase">Saving...</span>
+                  <div className="w-2 h-2 border border-current border-t-transparent rounded-full animate-spin"></div>
+                  <span>Syncing...</span>
+                </>
+              ) : hasUnsavedChanges ? (
+                <>
+                  <i className="fas fa-cloud-upload-alt text-[8px] sm:text-[10px]"></i>
+                  <span>Sync to Cloud</span>
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-check text-[8px] sm:text-[10px]"></i>
+                  <span>Synced</span>
                 </>
               )}
-              {saveStatus === 'saved' && (
-                <>
-                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-                  <span className="bg-green-600 text-white text-[7px] sm:text-[8px] font-black px-1 sm:px-1.5 py-0.5 rounded-sm tracking-widest uppercase">Saved</span>
-                </>
-              )}
-              {saveStatus === 'error' && (
-                <>
-                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
-                  <span className="bg-red-600 text-white text-[7px] sm:text-[8px] font-black px-1 sm:px-1.5 py-0.5 rounded-sm tracking-widest uppercase">Error</span>
-                </>
-              )}
-            </div>
+            </button>
+            {saveStatus === 'error' && (
+              <span className="bg-red-600 text-white text-[7px] sm:text-[8px] font-black px-1 sm:px-1.5 py-0.5 rounded-sm tracking-widest uppercase">
+                <i className="fas fa-exclamation-triangle mr-1"></i>Error
+              </span>
+            )}
             <select
               value={currentClass.id}
               onChange={(e) => {
@@ -361,8 +353,12 @@ const Dashboard: React.FC = () => {
       </div>
 
       <div className="mt-6 flex items-center justify-center gap-2 text-slate-400">
-        <i className="fas fa-history text-[9px]"></i>
-        <span className="text-[8px] font-black uppercase tracking-widest">Auto-archive enabled: Records are saved immediately.</span>
+        <i className="fas fa-cloud text-[9px]"></i>
+        <span className="text-[8px] font-black uppercase tracking-widest">
+          {hasUnsavedChanges
+            ? 'Unsaved changes - Click "Sync to Cloud" to save'
+            : 'All changes synced to cloud'}
+        </span>
       </div>
     </div>
   );

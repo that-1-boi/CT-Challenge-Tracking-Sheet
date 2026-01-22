@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, Theme, Student, ThemeCategory } from '../types';
 import { loadState, saveState, getAllStudentsFromDB, deleteStudent, deleteTheme, updateThemeCategory } from '../services/storageService';
 import { DEFAULT_CLASSES } from '../constants';
+import { dispatchSyncEvent, setLastSyncTimestamp } from '../services/syncEvents';
 
 const Admin: React.FC = () => {
   const [state, setState] = useState<AppState>({
@@ -15,7 +16,9 @@ const Admin: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [draggedStudent, setDraggedStudent] = useState<{ studentId: string; sourceClassId: string } | null>(null);
   const [dragOverClassId, setDragOverClassId] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<string>('Loading...');
+  const [saveStatus, setSaveStatus] = useState<'synced' | 'syncing' | 'unsaved' | 'error'>('synced');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const stateRef = useRef<AppState | null>(null); // For beforeunload access
 
   const [newStudentNames, setNewStudentNames] = useState<Record<string, string>>({});
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
@@ -42,20 +45,57 @@ const Admin: React.FC = () => {
     });
   }, []);
 
+  // Keep stateRef in sync for beforeunload handler
   useEffect(() => {
-    // Save state when it changes (but not on initial load)
+    stateRef.current = state;
+  }, [state]);
+
+  // Track unsaved changes when state changes (but not on initial load)
+  useEffect(() => {
     if (!isLoading) {
-      setSaveStatus('Saving changes...');
-      saveState(state)
-        .then(() => {
-          setSaveStatus('All changes saved');
-        })
-        .catch(err => {
-          console.error('Error saving state:', err);
-          setSaveStatus('Error saving');
-        });
+      setHasUnsavedChanges(true);
+      setSaveStatus('unsaved');
     }
   }, [state, isLoading]);
+
+  // Manual sync function - only saves when explicitly called
+  const syncToCloud = useCallback(async () => {
+    if (!hasUnsavedChanges) return;
+
+    setSaveStatus('syncing');
+    try {
+      await saveState(state);
+      setHasUnsavedChanges(false);
+      setSaveStatus('synced');
+      console.log('Admin: State synced to cloud successfully');
+
+      // Notify other components that data has been synced
+      setLastSyncTimestamp();
+      dispatchSyncEvent();
+    } catch (error) {
+      console.error('Admin: Error syncing state:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('unsaved'), 3000);
+    }
+  }, [state, hasUnsavedChanges]);
+
+  // Auto-sync on page unload to prevent data loss
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges && stateRef.current) {
+        // Attempt to save (note: async operations may not complete)
+        saveState(stateRef.current).catch(console.error);
+
+        // Show browser warning
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   const activeTheme = state.themes.find(t => t.name === state.currentWeekTheme) || state.themes[0];
 
@@ -475,9 +515,39 @@ const Admin: React.FC = () => {
             <h1 className="text-5xl font-extrabold text-[#333] tracking-tight uppercase italic text-shadow">Management</h1>
             <p className="text-gray-500 font-medium mt-2 uppercase tracking-widest text-sm">Classroom And Challenge</p>
           </div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className={`w-2 h-2 rounded-full ${saveStatus.includes('Saving') ? 'bg-amber-500 animate-pulse' : 'bg-green-500'}`}></div>
-            <span className="text-[10px] font-black uppercase text-black/40 tracking-widest">{saveStatus}</span>
+          <div className="flex items-center gap-3 mb-1">
+            {/* Sync Button */}
+            <button
+              onClick={syncToCloud}
+              disabled={!hasUnsavedChanges || saveStatus === 'syncing'}
+              className={`flex items-center gap-2 px-4 py-2 rounded-sm text-[10px] font-black uppercase tracking-widest transition-all ${
+                hasUnsavedChanges
+                  ? 'bg-[#f4c514] text-black hover:bg-black hover:text-[#f4c514] cursor-pointer shadow-md'
+                  : 'bg-green-600 text-white cursor-default'
+              } ${saveStatus === 'syncing' ? 'opacity-50 cursor-wait' : ''}`}
+            >
+              {saveStatus === 'syncing' ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                  <span>Syncing...</span>
+                </>
+              ) : hasUnsavedChanges ? (
+                <>
+                  <i className="fas fa-cloud-upload-alt"></i>
+                  <span>Sync to Cloud</span>
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-check"></i>
+                  <span>All Synced</span>
+                </>
+              )}
+            </button>
+            {saveStatus === 'error' && (
+              <span className="bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded-sm tracking-widest uppercase">
+                <i className="fas fa-exclamation-triangle mr-1"></i>Sync Error
+              </span>
+            )}
           </div>
         </div>
 
@@ -930,7 +1000,8 @@ const Admin: React.FC = () => {
               <p className="text-gray-400 text-[10px] mt-2 leading-relaxed">
                 1. Add all students to the <b>Unassigned</b> pool first.<br />
                 2. Drag and drop students individually OR use <b>Bulk Assign</b> to move multiple students at once.<br />
-                3. Click the <b>Image</b> icon OR focus the name field and <b>Ctrl+V</b> to paste an image for each challenge.
+                3. Click the <b>Image</b> icon OR focus the name field and <b>Ctrl+V</b> to paste an image for each challenge.<br />
+                4. <b className="text-[#f4c514]">Click "Sync to Cloud"</b> when done to save your changes.
               </p>
             </div>
           </div>

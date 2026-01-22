@@ -1,11 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { generateAnalytics } from '../services/analyticsService';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { generateAnalytics, clearAnalyticsCache } from '../services/analyticsService';
 import {
   AnalyticsResult,
   StudentProfile,
   ThemeStatistics,
   StudentThemeScore,
 } from '../services/analyticsTypes';
+import { subscribeSyncEvent } from '../services/syncEvents';
 
 type ViewMode = 'overview' | 'students' | 'themes';
 
@@ -18,18 +19,34 @@ const StudentAnalytics: React.FC = () => {
   const [search, setSearch] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
 
-  useEffect(() => {
-    generateAnalytics()
-      .then(result => {
-        setAnalytics(result);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Error generating analytics:', err);
-        setError('Failed to generate analytics');
-        setLoading(false);
-      });
+  // Load analytics - uses internal 24h cache, but can force refresh
+  const loadAnalytics = useCallback(async (forceRefresh = false) => {
+    setLoading(true);
+    try {
+      const result = await generateAnalytics(forceRefresh);
+      setAnalytics(result);
+      setLoading(false);
+    } catch (err) {
+      console.error('Error generating analytics:', err);
+      setError('Failed to generate analytics');
+      setLoading(false);
+    }
   }, []);
+
+  // Initial load (uses cache if available)
+  useEffect(() => {
+    loadAnalytics();
+  }, [loadAnalytics]);
+
+  // Listen for sync events to refresh data
+  useEffect(() => {
+    const unsubscribe = subscribeSyncEvent(() => {
+      console.log('StudentAnalytics: Sync event received, clearing cache and refreshing...');
+      clearAnalyticsCache(); // Clear the 24h cache
+      loadAnalytics(true); // Force refresh from DB
+    });
+    return unsubscribe;
+  }, [loadAnalytics]);
 
   const filteredStudents = useMemo(() => {
     if (!analytics) return [];
