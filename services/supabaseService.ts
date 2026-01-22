@@ -105,10 +105,10 @@ export const loadState = async (): Promise<AppState> => {
     console.log('🔄 Loading state from database...');
     const startTime = Date.now();
 
-    // 1. Load all themes
+    // 1. Load all themes (excluding large image columns to reduce egress)
     const { data: themesData, error: themesError } = await supabase
       .from('themes')
-      .select('*')
+      .select('id, name, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5, category, created_at, updated_at')
       .order('created_at', { ascending: true });
 
     if (themesError) {
@@ -121,35 +121,43 @@ export const loadState = async (): Promise<AppState> => {
       return getDefaultAppState();
     }
 
-    // 2. Load all students
+    // 2. Load all students (only needed columns)
     const { data: studentsData, error: studentsError } = await supabase
       .from('students')
-      .select('*')
+      .select('id, name')
       .order('name', { ascending: true });
 
     if (studentsError) {
       console.error('✗ Error loading students:', studentsError);
     }
 
-    // 3. Load all assignments
+    // 3. Load all assignments (only needed columns)
     const { data: assignmentsData, error: assignmentsError } = await supabase
       .from('student_assignments')
-      .select('*');
+      .select('student_id, theme_id, class_session_id');
 
     if (assignmentsError) {
       console.error('✗ Error loading assignments:', assignmentsError);
     }
 
-    // 4. Load all progress
+    // 4. Load all progress (only needed columns)
     const { data: progressData, error: progressError } = await supabase
       .from('student_progress')
-      .select('*');
+      .select('id, student_id, theme_id, class_session_id, challenge_1_completed, challenge_2_completed, challenge_3_completed, challenge_4_completed, challenge_5_completed, last_updated');
 
     if (progressError) {
       console.error('✗ Error loading progress:', progressError);
     }
 
+    // Log approximate payload sizes for egress monitoring
+    const themesSize = JSON.stringify(themesData).length;
+    const studentsSize = JSON.stringify(studentsData || []).length;
+    const assignmentsSize = JSON.stringify(assignmentsData || []).length;
+    const progressSize = JSON.stringify(progressData || []).length;
+    const totalSize = themesSize + studentsSize + assignmentsSize + progressSize;
+
     console.log(`✓ Loaded: ${themesData.length} themes, ${studentsData?.length || 0} students, ${assignmentsData?.length || 0} assignments, ${progressData?.length || 0} progress records`);
+    console.log(`📊 Egress estimate: ${(totalSize / 1024).toFixed(2)} KB (themes: ${(themesSize / 1024).toFixed(2)} KB, students: ${(studentsSize / 1024).toFixed(2)} KB, assignments: ${(assignmentsSize / 1024).toFixed(2)} KB, progress: ${(progressSize / 1024).toFixed(2)} KB)`);
 
     // 5. Build AppState structure
     const themes: Theme[] = themesData.map((themeRow: ThemeRow) => {
@@ -521,10 +529,10 @@ export const saveState = async (state: AppState): Promise<void> => {
 
 export const loadHistory = async (): Promise<HistoryEntry[]> => {
   try {
-    // Generate history from progress data
+    // Generate history from progress data (select only needed columns)
     const { data: progressData, error } = await supabase
       .from('v_student_roster')
-      .select('*')
+      .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated, assigned_at')
       .order('last_updated', { ascending: false});
 
     if (error) {
@@ -657,10 +665,10 @@ export const loadPublicViewState = async (): Promise<AppState> => {
     return getDefaultAppState();
   }
 
-  // 2. Load ONLY the public theme and class data using the optimized view
+  // 2. Load ONLY the public theme and class data using the optimized view (select only needed columns)
   const { data: rosterData, error } = await supabase
     .from('v_student_roster')
-    .select('*')
+    .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated, assigned_at')
     .eq('theme_name', publicThemeName)
     .eq('class_session_id', publicClassId);
 
@@ -796,9 +804,10 @@ export const loadStudentSearchHistory = async (
   searchFilter?: string
 ): Promise<HistoryEntry[]> => {
   try {
+    // Select only needed columns to reduce egress
     let query = supabase
       .from('v_student_roster')
-      .select('*')
+      .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated, assigned_at')
       .order('last_updated', { ascending: false });
 
     // Apply database-level filtering if search provided

@@ -33,10 +33,14 @@ const LivePublicView: React.FC = () => {
 
     loadData();
 
-    // Poll for updates every 10 seconds (reduced from 2s for performance)
+    // Refresh once per day (24 hours) to minimize egress
+    // Data is updated daily, so frequent polling is unnecessary
+    const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
     const interval = setInterval(async () => {
       try {
-        // Use optimized load function for polling
+        console.log('LivePublicView: Daily refresh triggered');
+        // Use optimized load function for refresh
         const [loadedState, loadedHistory] = await Promise.all([
           loadPublicViewState(),
           loadHistory()
@@ -54,9 +58,9 @@ const LivePublicView: React.FC = () => {
 
         setHistory(loadedHistory);
       } catch (error) {
-        console.error('Error polling state:', error);
+        console.error('Error refreshing state:', error);
       }
-    }, 10000);
+    }, REFRESH_INTERVAL_MS);
 
     return () => {
       clearInterval(interval);

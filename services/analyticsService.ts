@@ -20,6 +20,57 @@ import {
 } from './analyticsTypes';
 
 // ============================================================================
+// DAILY CACHE FOR ANALYTICS (reduces egress by caching results for 24 hours)
+// ============================================================================
+
+const ANALYTICS_CACHE_KEY = 'analytics_cache';
+const ANALYTICS_CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+interface AnalyticsCache {
+  data: AnalyticsResult;
+  timestamp: number;
+}
+
+function getCachedAnalytics(): AnalyticsResult | null {
+  try {
+    const cached = localStorage.getItem(ANALYTICS_CACHE_KEY);
+    if (!cached) return null;
+
+    const { data, timestamp }: AnalyticsCache = JSON.parse(cached);
+    const age = Date.now() - timestamp;
+
+    if (age < ANALYTICS_CACHE_DURATION_MS) {
+      console.log(`📊 Using cached analytics (${Math.round(age / 1000 / 60)} minutes old)`);
+      return data;
+    }
+
+    console.log('📊 Analytics cache expired, will refresh');
+    return null;
+  } catch (error) {
+    console.error('Error reading analytics cache:', error);
+    return null;
+  }
+}
+
+function setCachedAnalytics(data: AnalyticsResult): void {
+  try {
+    const cache: AnalyticsCache = {
+      data,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(ANALYTICS_CACHE_KEY, JSON.stringify(cache));
+    console.log('📊 Analytics cached for 24 hours');
+  } catch (error) {
+    console.error('Error caching analytics:', error);
+  }
+}
+
+export function clearAnalyticsCache(): void {
+  localStorage.removeItem(ANALYTICS_CACHE_KEY);
+  console.log('📊 Analytics cache cleared');
+}
+
+// ============================================================================
 // STATISTICAL HELPER FUNCTIONS
 // ============================================================================
 
@@ -112,10 +163,10 @@ function getDistributionBuckets(values: number[]): { bucket: string; count: numb
 // ============================================================================
 
 async function loadRawAnalyticsData(): Promise<RawStudentThemeData[]> {
-  // Load all progress data with theme and student info
+  // Load all progress data with theme and student info (select only needed columns to reduce egress)
   const { data: rosterData, error: rosterError } = await supabase
     .from('v_student_roster')
-    .select('*')
+    .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated')
     .order('last_updated', { ascending: true });
 
   if (rosterError) {
@@ -509,7 +560,15 @@ function calculateClassSummaries(profiles: StudentProfile[]): ClassSummary[] {
 // MAIN ANALYTICS FUNCTION
 // ============================================================================
 
-export async function generateAnalytics(): Promise<AnalyticsResult> {
+export async function generateAnalytics(forceRefresh = false): Promise<AnalyticsResult> {
+  // Check cache first (updates once per day to reduce egress)
+  if (!forceRefresh) {
+    const cached = getCachedAnalytics();
+    if (cached) {
+      return cached;
+    }
+  }
+
   console.log('📊 Generating student performance analytics...');
   const startTime = Date.now();
 
@@ -592,7 +651,7 @@ export async function generateAnalytics(): Promise<AnalyticsResult> {
   const elapsed = Date.now() - startTime;
   console.log(`✅ Analytics generated in ${elapsed}ms`);
 
-  return {
+  const result: AnalyticsResult = {
     generatedAt: new Date().toISOString(),
     totalStudents: uniqueStudents,
     totalThemes: themeStatistics.length,
@@ -607,4 +666,9 @@ export async function generateAnalytics(): Promise<AnalyticsResult> {
     hardestThemes,
     easiestThemes,
   };
+
+  // Cache the result for 24 hours to reduce egress
+  setCachedAnalytics(result);
+
+  return result;
 }
