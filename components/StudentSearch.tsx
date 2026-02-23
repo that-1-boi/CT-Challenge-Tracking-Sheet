@@ -221,9 +221,9 @@ const StudentSearch: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 sm:gap-8">
-        {/* Search Column - suggestions hidden on mobile */}
-        <div className="w-full lg:w-1/3 space-y-4">
+      <div className="flex flex-col lg:flex-row gap-4 sm:gap-8 lg:items-start">
+        {/* Search Column - sticky on desktop, suggestions hidden on mobile */}
+        <div className="w-full lg:w-1/3 space-y-4 lg:sticky lg:top-4 lg:self-start">
           <div className="relative">
             <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
             <input
@@ -264,7 +264,7 @@ const StudentSearch: React.FC = () => {
           </div>
 
           {/* Suggested students list - hidden on mobile (< 1024px / lg breakpoint) */}
-          <div className="hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[600px] overflow-y-auto shadow-sm custom-scrollbar">
+          <div className="hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[calc(100vh-180px)] overflow-y-auto shadow-sm custom-scrollbar">
             {filteredSummaries.length > 0 ? (
               filteredSummaries.map(summary => (
                 <button
