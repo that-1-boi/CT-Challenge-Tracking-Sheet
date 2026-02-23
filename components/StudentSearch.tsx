@@ -221,10 +221,9 @@ const StudentSearch: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
-        {/* Search Column - fixed to viewport on desktop */}
-        {/* Position: sidebar(80px) + content padding (40px on lg) = 120px from left */}
-        <div className="w-full lg:w-[200px] xl:w-[240px] space-y-3 lg:fixed lg:top-28 lg:left-[120px] lg:z-40 flex-shrink-0 lg:bg-white lg:pt-2 lg:pb-4">
+      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 lg:items-start">
+        {/* Search Column - sticky on desktop, scrolls with page then sticks near top */}
+        <div className="w-full lg:w-[200px] xl:w-[240px] space-y-3 lg:sticky lg:top-4 lg:self-start flex-shrink-0">
           <div className="relative">
             <i className="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]"></i>
             <input
@@ -284,9 +283,6 @@ const StudentSearch: React.FC = () => {
             )}
           </div>
         </div>
-
-        {/* Spacer for fixed sidebar on desktop */}
-        <div className="hidden lg:block lg:w-[200px] xl:w-[240px] flex-shrink-0" aria-hidden="true"></div>
 
         {/* Details Column */}
         <div className="flex-1 space-y-6 min-w-0">
