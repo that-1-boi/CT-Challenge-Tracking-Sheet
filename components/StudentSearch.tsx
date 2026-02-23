@@ -221,9 +221,10 @@ const StudentSearch: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 lg:items-start">
-        {/* Search Column - sticky on desktop, thinner width */}
-        <div className="w-full lg:w-[200px] xl:w-[240px] space-y-3 lg:sticky lg:top-4 flex-shrink-0">
+      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+        {/* Search Column - fixed to viewport on desktop */}
+        {/* Position: sidebar(80px) + content padding (40px on lg) = 120px from left */}
+        <div className="w-full lg:w-[200px] xl:w-[240px] space-y-3 lg:fixed lg:top-28 lg:left-[120px] lg:z-40 flex-shrink-0 lg:bg-white lg:pt-2 lg:pb-4">
           <div className="relative">
             <i className="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]"></i>
             <input
@@ -264,7 +265,7 @@ const StudentSearch: React.FC = () => {
           </div>
 
           {/* Suggested students list - hidden on mobile (< 1024px / lg breakpoint) */}
-          <div className="hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[calc(100vh-140px)] overflow-y-auto shadow-sm custom-scrollbar">
+          <div className="hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[calc(100vh-180px)] overflow-y-auto shadow-sm custom-scrollbar">
             {filteredSummaries.length > 0 ? (
               filteredSummaries.map(summary => (
                 <button
@@ -283,6 +284,9 @@ const StudentSearch: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* Spacer for fixed sidebar on desktop */}
+        <div className="hidden lg:block lg:w-[200px] xl:w-[240px] flex-shrink-0" aria-hidden="true"></div>
 
         {/* Details Column */}
         <div className="flex-1 space-y-6 min-w-0">
