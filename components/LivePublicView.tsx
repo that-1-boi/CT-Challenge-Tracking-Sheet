@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, HistoryEntry, StudentProgress } from '../types';
-import { loadState, saveState, loadHistory, loadChallengeImages, loadPublicViewState, getPublicSettings, updatePublicSettings } from '../services/storageService';
+import { loadHistory, loadPublicViewState, updatePublicSettings } from '../services/storageService';
 import { DEFAULT_CLASSES } from '../constants';
 
 const LivePublicView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedChallenge, setSelectedChallenge] = useState<{ name: string, image?: string } | null>(null);
-  const [challengeImages, setChallengeImages] = useState<Record<string, string[]>>({});
+  const [selectedChallenge, setSelectedChallenge] = useState<string | null>(null);
 
   // Track user's manual class selection separately
   const userSelectedClassId = useRef<string | null>(null);
@@ -146,20 +145,9 @@ const LivePublicView: React.FC = () => {
     activeTheme?.classes.find(c => c.id !== 'unassigned') ||
     activeTheme?.classes[0];
 
-  const openChallengeDetails = async (index: number) => {
+  const openChallengeDetails = (index: number) => {
     if (!activeTheme) return;
-
-    // Load images only when modal opens (lazy load)
-    let images = challengeImages[activeTheme.name];
-    if (!images || images.length === 0) {
-      images = await loadChallengeImages(activeTheme.name);
-      setChallengeImages(prev => ({ ...prev, [activeTheme.name]: images }));
-    }
-
-    setSelectedChallenge({
-      name: activeTheme.challenges[index],
-      image: images[index]
-    });
+    setSelectedChallenge(activeTheme.challenges[index]);
   };
 
   if (!activeTheme || !currentClass) {
@@ -178,21 +166,21 @@ const LivePublicView: React.FC = () => {
 
   return (
     <div className="w-full max-w-[1400px] mx-auto px-1 sm:px-4 md:px-8 animate-in fade-in duration-1000 overflow-hidden">
-      {/* Challenge Info Modal - Refined sizing and visibility */}
+      {/* Challenge Info Modal */}
       {selectedChallenge && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center p-6 md:p-12 bg-black/70 backdrop-blur-sm animate-in fade-in duration-300"
           onClick={() => setSelectedChallenge(null)}
         >
           <div
-            className="bg-white max-w-4xl w-full h-[70vh] md:h-[75vh] rounded-sm overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-300 relative flex flex-col border-4 border-black"
+            className="bg-white max-w-2xl w-full rounded-sm overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-300 relative flex flex-col border-4 border-black"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header - standard block header above the image */}
+            {/* Header */}
             <div className="bg-black p-4 md:p-5 flex items-center justify-between z-10 border-b-4 border-[#f4c514]">
               <div>
-                <h3 className="text-xl md:text-3xl font-black uppercase italic tracking-tighter text-[#f4c514] leading-tight">{selectedChallenge.name}</h3>
-                <p className="text-[9px] font-black text-white/50 tracking-[0.2em] uppercase mt-1">Challenge Preview</p>
+                <h3 className="text-xl md:text-3xl font-black uppercase italic tracking-tighter text-[#f4c514] leading-tight">{selectedChallenge}</h3>
+                <p className="text-[9px] font-black text-white/50 tracking-[0.2em] uppercase mt-1">Challenge Details</p>
               </div>
               <button
                 onClick={() => setSelectedChallenge(null)}
@@ -202,30 +190,11 @@ const LivePublicView: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex-1 bg-white relative overflow-hidden flex items-center justify-center">
-              {selectedChallenge.image ? (
-                <div className="w-full h-full p-4 md:p-8 flex items-center justify-center">
-                  <img
-                    src={selectedChallenge.image}
-                    alt={selectedChallenge.name}
-                    className="max-w-full max-h-full object-contain drop-shadow-xl"
-                  />
-                </div>
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-slate-50">
-                  <div className="w-16 h-16 bg-slate-100 flex items-center justify-center rounded-full">
-                    <i className="fas fa-image text-slate-200 text-3xl"></i>
-                  </div>
-                  <p className="text-xl font-black uppercase text-slate-300 italic tracking-tighter">No visual available</p>
-                </div>
-              )}
-            </div>
-
             {/* Bottom Status Bar */}
             <div className="bg-black p-3 flex items-center justify-between px-6">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-[9px] font-black uppercase text-white/40 tracking-widest">Visual Display Mode</span>
+                <span className="text-[9px] font-black uppercase text-white/40 tracking-widest">Challenge View</span>
               </div>
               <button
                 onClick={() => setSelectedChallenge(null)}

@@ -164,10 +164,12 @@ function getDistributionBuckets(values: number[]): { bucket: string; count: numb
 
 async function loadRawAnalyticsData(): Promise<RawStudentThemeData[]> {
   // Load all progress data with theme and student info (select only needed columns to reduce egress)
+  // Limit to 5000 rows to prevent excessive egress while allowing comprehensive analytics
   const { data: rosterData, error: rosterError } = await supabase
     .from('v_student_roster')
     .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated')
-    .order('last_updated', { ascending: true });
+    .order('last_updated', { ascending: true })
+    .limit(5000);
 
   if (rosterError) {
     console.error('Error loading roster data:', rosterError);

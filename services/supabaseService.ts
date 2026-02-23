@@ -21,11 +21,6 @@ interface ThemeRow {
   challenge_3: string;
   challenge_4: string;
   challenge_5: string;
-  challenge_1_image?: string | null;
-  challenge_2_image?: string | null;
-  challenge_3_image?: string | null;
-  challenge_4_image?: string | null;
-  challenge_5_image?: string | null;
   category?: string | null; // 'mechanical' or 'programming'
   created_at?: string;
   updated_at?: string;
@@ -97,10 +92,69 @@ async function setAppSetting(key: string, value: string): Promise<void> {
 }
 
 // =============================================================================
+// STATE CACHING (reduces egress by caching app state for 5 minutes)
+// =============================================================================
+
+const STATE_CACHE_KEY = 'ct_app_state_cache';
+const STATE_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+interface StateCache {
+  data: AppState;
+  timestamp: number;
+}
+
+function getCachedState(): AppState | null {
+  try {
+    const cached = localStorage.getItem(STATE_CACHE_KEY);
+    if (!cached) return null;
+
+    const { data, timestamp }: StateCache = JSON.parse(cached);
+    const age = Date.now() - timestamp;
+
+    if (age < STATE_CACHE_DURATION_MS) {
+      console.log(`📦 Using cached state (${Math.round(age / 1000)}s old)`);
+      return data;
+    }
+
+    console.log('📦 State cache expired, will refresh');
+    return null;
+  } catch (error) {
+    console.error('Error reading state cache:', error);
+    return null;
+  }
+}
+
+function setCachedState(data: AppState): void {
+  try {
+    const cache: StateCache = {
+      data,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(STATE_CACHE_KEY, JSON.stringify(cache));
+    console.log('📦 State cached for 5 minutes');
+  } catch (error) {
+    console.error('Error caching state:', error);
+  }
+}
+
+export function clearStateCache(): void {
+  localStorage.removeItem(STATE_CACHE_KEY);
+  console.log('📦 State cache cleared');
+}
+
+// =============================================================================
 // LOAD STATE FROM DATABASE
 // =============================================================================
 
-export const loadState = async (): Promise<AppState> => {
+export const loadState = async (forceRefresh = false): Promise<AppState> => {
+  // Check cache first (unless forcing refresh)
+  if (!forceRefresh) {
+    const cached = getCachedState();
+    if (cached) {
+      return cached;
+    }
+  }
+
   try {
     console.log('🔄 Loading state from database...');
     const startTime = Date.now();
@@ -194,7 +248,6 @@ export const loadState = async (): Promise<AppState> => {
           themeRow.challenge_4,
           themeRow.challenge_5,
         ],
-        challengeImages: ['', '', '', '', ''], // Lazy loaded on-demand
         classes,
         category: (themeRow.category as ThemeCategory) || undefined,
       };
@@ -241,7 +294,7 @@ export const loadState = async (): Promise<AppState> => {
     const elapsed = Date.now() - startTime;
     console.log(`✅ State loaded in ${elapsed}ms`);
 
-    return {
+    const result: AppState = {
       themes,
       currentWeekTheme: currentWeekThemeName,
       publicThemeName,
@@ -249,6 +302,11 @@ export const loadState = async (): Promise<AppState> => {
       selectedClassId,
       progress,
     };
+
+    // Cache the result for 5 minutes
+    setCachedState(result);
+
+    return result;
   } catch (error) {
     console.error('✗ Fatal error loading state:', error);
     return getDefaultAppState();
@@ -272,35 +330,30 @@ export const saveState = async (state: AppState): Promise<void> => {
     const themeIdMap = new Map<string, string>();
     (existingThemes || []).forEach((t: any) => themeIdMap.set(t.name, t.id));
 
-    // 1. UPSERT THEMES
+    // 1. UPSERT THEMES (batch operation)
     console.log('  📝 Saving themes...');
-    for (const theme of state.themes) {
-      const themeData: any = {
-        name: theme.name,
-        challenge_1: theme.challenges[0] || 'Challenge 1',
-        challenge_2: theme.challenges[1] || 'Challenge 2',
-        challenge_3: theme.challenges[2] || 'Challenge 3',
-        challenge_4: theme.challenges[3] || 'Challenge 4',
-        challenge_5: theme.challenges[4] || 'Challenge 5',
-        challenge_1_image: theme.challengeImages?.[0] || null,
-        challenge_2_image: theme.challengeImages?.[1] || null,
-        challenge_3_image: theme.challengeImages?.[2] || null,
-        challenge_4_image: theme.challengeImages?.[3] || null,
-        challenge_5_image: theme.challengeImages?.[4] || null,
-        category: theme.category || null,
-        updated_at: new Date().toISOString(),
-      };
+    const themesArray = state.themes.map(theme => ({
+      name: theme.name,
+      challenge_1: theme.challenges[0] || 'Challenge 1',
+      challenge_2: theme.challenges[1] || 'Challenge 2',
+      challenge_3: theme.challenges[2] || 'Challenge 3',
+      challenge_4: theme.challenges[3] || 'Challenge 4',
+      challenge_5: theme.challenges[4] || 'Challenge 5',
+      category: theme.category || null,
+      updated_at: new Date().toISOString(),
+    }));
 
+    if (themesArray.length > 0) {
       const { data, error } = await supabase
         .from('themes')
-        .upsert(themeData, { onConflict: 'name' })
-        .select('id, name')
-        .single();
+        .upsert(themesArray, { onConflict: 'name' })
+        .select('id, name');
 
       if (error) {
-        console.error(`  ✗ Error saving theme ${theme.name}:`, error);
+        console.error('  ✗ Error batch saving themes:', error);
       } else if (data) {
-        themeIdMap.set(data.name, data.id);
+        data.forEach((t: any) => themeIdMap.set(t.name, t.id));
+        console.log(`  ✓ Batch saved ${data.length} themes`);
       }
     }
 
@@ -318,21 +371,22 @@ export const saveState = async (state: AppState): Promise<void> => {
       }
     }
 
-    // Upsert all students (each student exists once)
-    for (const student of allStudents.values()) {
+    // Batch upsert all students (single DB call instead of N calls)
+    const studentsArray = Array.from(allStudents.values()).map(student => ({
+      id: student.id,
+      name: student.name,
+      updated_at: new Date().toISOString(),
+    }));
+
+    if (studentsArray.length > 0) {
       const { error } = await supabase
         .from('students')
-        .upsert(
-          {
-            id: student.id,
-            name: student.name,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        );
+        .upsert(studentsArray, { onConflict: 'id' });
 
       if (error) {
-        console.error(`  ✗ Error saving student ${student.name}:`, error);
+        console.error('  ✗ Error batch saving students:', error);
+      } else {
+        console.log(`  ✓ Batch saved ${studentsArray.length} students`);
       }
     }
 
@@ -370,22 +424,28 @@ export const saveState = async (state: AppState): Promise<void> => {
       (a: any) => !currentKeys.has(`${a.student_id}_${a.theme_id}`)
     );
 
-    for (const assignment of toDelete) {
-      await supabase
-        .from('student_assignments')
-        .delete()
-        .eq('student_id', assignment.student_id)
-        .eq('theme_id', assignment.theme_id);
+    // Batch delete orphaned assignments
+    if (toDelete.length > 0) {
+      for (const assignment of toDelete) {
+        await supabase
+          .from('student_assignments')
+          .delete()
+          .eq('student_id', assignment.student_id)
+          .eq('theme_id', assignment.theme_id);
+      }
+      console.log(`  ✓ Deleted ${toDelete.length} orphaned assignments`);
     }
 
-    // Upsert current assignments
-    for (const assignment of currentAssignments) {
+    // Batch upsert current assignments (single DB call instead of N calls)
+    if (currentAssignments.length > 0) {
       const { error } = await supabase
         .from('student_assignments')
-        .upsert(assignment, { onConflict: 'student_id,theme_id' });
+        .upsert(currentAssignments, { onConflict: 'student_id,theme_id' });
 
       if (error) {
-        console.error('  ✗ Error saving assignment:', error);
+        console.error('  ✗ Error batch saving assignments:', error);
+      } else {
+        console.log(`  ✓ Batch saved ${currentAssignments.length} assignments`);
       }
     }
 
@@ -411,9 +471,9 @@ export const saveState = async (state: AppState): Promise<void> => {
       console.log(`  ✓ Deleted ${progressDeleted} progress records for unassigned students`);
     }
 
-    // 4. SAVE STUDENT PROGRESS
+    // 4. SAVE STUDENT PROGRESS (batch operation)
     console.log('  ✅ Saving progress...');
-    let progressSaved = 0;
+    const progressArray: any[] = [];
     let progressErrors = 0;
 
     for (const [key, prog] of Object.entries(state.progress)) {
@@ -436,7 +496,7 @@ export const saveState = async (state: AppState): Promise<void> => {
       }
 
       // Convert challenge IDs to boolean columns
-      const progressData = {
+      progressArray.push({
         student_id: studentId,
         theme_id: themeId,
         class_session_id: classSessionId,
@@ -446,21 +506,26 @@ export const saveState = async (state: AppState): Promise<void> => {
         challenge_4_completed: prog.challengesCompleted.includes('c4'),
         challenge_5_completed: prog.challengesCompleted.includes('c5'),
         last_updated: new Date(prog.timestamp || Date.now()).toISOString(),
-      };
+      });
+    }
 
+    // Batch upsert all progress records (single DB call instead of N calls)
+    if (progressArray.length > 0) {
       const { error } = await supabase
         .from('student_progress')
-        .upsert(progressData, { onConflict: 'student_id,theme_id' });
+        .upsert(progressArray, { onConflict: 'student_id,theme_id' });
 
       if (error) {
-        console.error(`  ✗ Error saving progress for ${prog.studentName}:`, error);
+        console.error('  ✗ Error batch saving progress:', error);
         progressErrors++;
       } else {
-        progressSaved++;
+        console.log(`  ✓ Batch saved ${progressArray.length} progress records`);
       }
     }
 
-    console.log(`  ✓ Progress: ${progressSaved} saved, ${progressErrors} errors`);
+    if (progressErrors > 0) {
+      console.log(`  ⚠ ${progressErrors} progress errors`);
+    }
 
     // 4b. ENSURE ALL ASSIGNED STUDENTS HAVE PROGRESS RECORDS (even if empty)
     // Skip students in "unassigned" - they shouldn't have progress records
@@ -530,10 +595,12 @@ export const saveState = async (state: AppState): Promise<void> => {
 export const loadHistory = async (): Promise<HistoryEntry[]> => {
   try {
     // Generate history from progress data (select only needed columns)
+    // Limit to 1000 rows to prevent excessive egress
     const { data: progressData, error } = await supabase
       .from('v_student_roster')
       .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated, assigned_at')
-      .order('last_updated', { ascending: false});
+      .order('last_updated', { ascending: false })
+      .limit(1000);
 
     if (error) {
       console.error('Error loading history:', error);
@@ -605,36 +672,6 @@ export const saveHistory = async (_history: HistoryEntry[]): Promise<void> => {
 };
 
 // =============================================================================
-// LAZY LOAD CHALLENGE IMAGES
-// =============================================================================
-
-export const loadChallengeImages = async (themeName: string): Promise<string[]> => {
-  try {
-    const { data, error} = await supabase
-      .from('themes')
-      .select('challenge_1_image, challenge_2_image, challenge_3_image, challenge_4_image, challenge_5_image')
-      .eq('name', themeName)
-      .single();
-
-    if (error) {
-      console.error('Error loading challenge images:', error);
-      return ['', '', '', '', ''];
-    }
-
-    return [
-      data.challenge_1_image || '',
-      data.challenge_2_image || '',
-      data.challenge_3_image || '',
-      data.challenge_4_image || '',
-      data.challenge_5_image || ''
-    ];
-  } catch (error) {
-    console.error('Fatal error loading challenge images:', error);
-    return ['', '', '', '', ''];
-  }
-};
-
-// =============================================================================
 // OPTIMIZED PUBLIC VIEW LOADING
 // =============================================================================
 
@@ -697,7 +734,6 @@ export const loadPublicViewState = async (): Promise<AppState> => {
           themeData.challenge_4,
           themeData.challenge_5
         ],
-        challengeImages: ['', '', '', '', ''],
         classes: [{
           id: publicClassId,
           name: DEFAULT_CLASSES.find(c => c.id === publicClassId)?.name || publicClassId,
@@ -753,7 +789,6 @@ export const loadPublicViewState = async (): Promise<AppState> => {
       themeData.challenge_4,
       themeData.challenge_5
     ],
-    challengeImages: ['', '', '', '', ''], // Lazy loaded
     classes: [
       {
         id: publicClassId,
@@ -805,10 +840,12 @@ export const loadStudentSearchHistory = async (
 ): Promise<HistoryEntry[]> => {
   try {
     // Select only needed columns to reduce egress
+    // Limit to 500 rows to prevent excessive egress
     let query = supabase
       .from('v_student_roster')
       .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated, assigned_at')
-      .order('last_updated', { ascending: false });
+      .order('last_updated', { ascending: false })
+      .limit(500);
 
     // Apply database-level filtering if search provided
     if (searchFilter && searchFilter.trim()) {

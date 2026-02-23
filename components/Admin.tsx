@@ -25,8 +25,6 @@ const Admin: React.FC = () => {
   const [editingThemeName, setEditingThemeName] = useState<string | null>(null);
   const [editingThemeNewName, setEditingThemeNewName] = useState<string>('');
   const [newThemeName, setNewThemeName] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeUploadIdx, setActiveUploadIdx] = useState<number | null>(null);
 
   // Bulk assignment state
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
@@ -204,65 +202,6 @@ const Admin: React.FC = () => {
     }));
   };
 
-  const handleImageUpload = (index: number) => {
-    setActiveUploadIdx(index);
-    fileInputRef.current?.click();
-  };
-
-  const handlePasteImage = (Leeds: React.ClipboardEvent, index: number) => {
-    const items = Leeds.clipboardData?.items;
-    if (!items) return;
-
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf("image") !== -1) {
-        const file = items[i].getAsFile();
-        if (file) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64String = reader.result as string;
-            setState(prev => ({
-              ...prev,
-              themes: prev.themes.map(t => {
-                if (t.name === prev.currentWeekTheme) {
-                  const newImages = [...(t.challengeImages || ['', '', '', '', ''])];
-                  newImages[index] = base64String;
-                  return { ...t, challengeImages: newImages };
-                }
-                return t;
-              })
-            }));
-            setSaveStatus('Image pasted successfully!');
-            setTimeout(() => setSaveStatus('All changes saved'), 2000);
-          };
-          reader.readAsDataURL(file);
-        }
-      }
-    }
-  };
-
-  const onFileChange = (e: React.ChangeEvent<HTMLSelectElement> | React.ChangeEvent<HTMLInputElement>) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file && activeUploadIdx !== null) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        setState(prev => ({
-          ...prev,
-          themes: prev.themes.map(t => {
-            if (t.name === prev.currentWeekTheme) {
-              const newImages = [...(t.challengeImages || ['', '', '', '', ''])];
-              newImages[activeUploadIdx] = base64String;
-              return { ...t, challengeImages: newImages };
-            }
-            return t;
-          })
-        }));
-        setActiveUploadIdx(null);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const selectActiveTheme = (themeName: string) => {
     setState(prev => ({ ...prev, currentWeekTheme: themeName }));
   };
@@ -315,7 +254,6 @@ const Admin: React.FC = () => {
     const newTheme: Theme = {
       name,
       challenges: ['Challenge 1', 'Challenge 2', 'Challenge 3', 'Challenge 4', 'Challenge 5'],
-      challengeImages: ['', '', '', '', ''],
       classes: newThemeClasses
     };
 
@@ -502,13 +440,6 @@ const Admin: React.FC = () => {
 
   return (
     <>
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={onFileChange}
-        accept="image/png,image/jpeg"
-        className="hidden"
-      />
       <div className="space-y-12 pb-20">
         <div className="border-b-4 border-[#f4c514] pb-4 flex items-end justify-between">
           <div>
@@ -964,31 +895,18 @@ const Admin: React.FC = () => {
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-2">
-                    {activeTheme.challenges.map((chName, idx) => {
-                      const hasImage = activeTheme.challengeImages && activeTheme.challengeImages[idx];
-                      return (
-                        <div key={idx} className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleImageUpload(idx)}
-                            title="Upload Challenge Image"
-                            className={`w-10 h-10 flex items-center justify-center border border-black/10 shrink-0 transition-colors ${hasImage ? 'bg-green-500 text-white' : 'bg-[#f4c514] text-black hover:bg-black hover:text-[#f4c514]'}`}
-                          >
-                            <i className={`fas ${hasImage ? 'fa-check-circle' : 'fa-image'}`}></i>
-                          </button>
-                          <div className="flex-1 flex items-center">
-                            <span className="bg-[#f4c514] text-black w-10 h-10 flex items-center justify-center font-black border border-black/10 border-r-0 shrink-0">C{idx + 1}</span>
-                            <input
-                              type="text"
-                              value={chName}
-                              onPaste={(e) => handlePasteImage(e, idx)}
-                              onChange={(e) => updateThemeChallengeName(idx, e.target.value)}
-                              placeholder="Challenge name (Ctrl+V to paste image)"
-                              className="flex-1 bg-white border border-black/10 p-2 h-10 text-xs font-bold focus:ring-0 outline-none text-black capitalize"
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {activeTheme.challenges.map((chName, idx) => (
+                      <div key={idx} className="flex items-center">
+                        <span className="bg-[#f4c514] text-black w-10 h-10 flex items-center justify-center font-black border border-black/10 border-r-0 shrink-0">C{idx + 1}</span>
+                        <input
+                          type="text"
+                          value={chName}
+                          onChange={(e) => updateThemeChallengeName(idx, e.target.value)}
+                          placeholder="Challenge name"
+                          className="flex-1 bg-white border border-black/10 p-2 h-10 text-xs font-bold focus:ring-0 outline-none text-black capitalize"
+                        />
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -1000,8 +918,7 @@ const Admin: React.FC = () => {
               <p className="text-gray-400 text-[10px] mt-2 leading-relaxed">
                 1. Add all students to the <b>Unassigned</b> pool first.<br />
                 2. Drag and drop students individually OR use <b>Bulk Assign</b> to move multiple students at once.<br />
-                3. Click the <b>Image</b> icon OR focus the name field and <b>Ctrl+V</b> to paste an image for each challenge.<br />
-                4. <b className="text-[#f4c514]">Click "Sync to Cloud"</b> when done to save your changes.
+                3. <b className="text-[#f4c514]">Click "Sync to Cloud"</b> when done to save your changes.
               </p>
             </div>
           </div>

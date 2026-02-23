@@ -4,7 +4,6 @@ export type ThemeCategory = 'mechanical' | 'programming';
 export interface Theme {
   name: string;
   challenges: string[]; // List of 5 challenge names associated with this theme
-  challengeImages?: string[]; // Optional list of 5 base64 image strings for each challenge
   classes: ClassSession[]; // Rosters are now scoped specifically to each theme
   category?: ThemeCategory; // Theme category: mechanical or programming
 }
