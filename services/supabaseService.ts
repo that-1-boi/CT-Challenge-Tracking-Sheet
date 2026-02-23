@@ -672,6 +672,108 @@ export const saveHistory = async (_history: HistoryEntry[]): Promise<void> => {
 };
 
 // =============================================================================
+// PAGINATED HISTORY LOADING (lazy loading for History page)
+// =============================================================================
+
+export interface PaginatedHistoryResult {
+  entries: HistoryEntry[];
+  hasMore: boolean;
+  totalCount: number;
+}
+
+export const loadHistoryPaginated = async (
+  offset: number = 0,
+  limit: number = 20
+): Promise<PaginatedHistoryResult> => {
+  try {
+    console.log(`📖 Loading history page: offset=${offset}, limit=${limit}`);
+
+    // Get total count for "has more" calculation
+    const { count, error: countError } = await supabase
+      .from('v_student_roster')
+      .select('*', { count: 'exact', head: true })
+      .not('last_updated', 'is', null);
+
+    if (countError) {
+      console.error('Error getting history count:', countError);
+    }
+
+    const totalCount = count || 0;
+
+    // Fetch paginated data
+    const { data: progressData, error } = await supabase
+      .from('v_student_roster')
+      .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated, assigned_at')
+      .not('last_updated', 'is', null)
+      .order('last_updated', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('Error loading paginated history:', error);
+      return { entries: [], hasMore: false, totalCount: 0 };
+    }
+
+    if (!progressData || progressData.length === 0) {
+      return { entries: [], hasMore: false, totalCount };
+    }
+
+    // Load theme data for challenge names (only for themes in this page)
+    const themeIds = [...new Set((progressData as RosterViewRow[]).map(r => r.theme_id))];
+    const { data: allThemes } = await supabase
+      .from('themes')
+      .select('id, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5, created_at')
+      .in('id', themeIds);
+
+    const themeMap = new Map(allThemes?.map(t => [t.id, t]) || []);
+
+    // Convert to history entries
+    const entries: HistoryEntry[] = [];
+
+    for (const row of progressData as RosterViewRow[]) {
+      const themeData = themeMap.get(row.theme_id);
+      if (!themeData) continue;
+
+      const allChallenges = [
+        themeData.challenge_1,
+        themeData.challenge_2,
+        themeData.challenge_3,
+        themeData.challenge_4,
+        themeData.challenge_5,
+      ];
+
+      const completedChallenges: string[] = [];
+      if (row.c1) completedChallenges.push(allChallenges[0]);
+      if (row.c2) completedChallenges.push(allChallenges[1]);
+      if (row.c3) completedChallenges.push(allChallenges[2]);
+      if (row.c4) completedChallenges.push(allChallenges[3]);
+      if (row.c5) completedChallenges.push(allChallenges[4]);
+
+      const date = new Date(row.last_updated);
+
+      entries.push({
+        id: `${row.student_id}_${row.theme_id}_${date.toISOString()}`,
+        studentName: row.student_name,
+        className: row.class_session_name,
+        weekName: `Session ${date.toLocaleDateString()}`,
+        weekTheme: row.theme_name,
+        challenges: completedChallenges,
+        allAvailableChallenges: allChallenges,
+        date: row.last_updated,
+        themeCreatedAt: themeData.created_at || undefined,
+      });
+    }
+
+    const hasMore = offset + entries.length < totalCount;
+    console.log(`✅ Loaded ${entries.length} entries, hasMore: ${hasMore}, total: ${totalCount}`);
+
+    return { entries, hasMore, totalCount };
+  } catch (error) {
+    console.error('Fatal error loading paginated history:', error);
+    return { entries: [], hasMore: false, totalCount: 0 };
+  }
+};
+
+// =============================================================================
 // OPTIMIZED PUBLIC VIEW LOADING
 // =============================================================================
 
@@ -914,6 +1016,143 @@ export const loadStudentSearchHistory = async (
     return history;
   } catch (error) {
     console.error('Fatal error loading student search history:', error);
+    return [];
+  }
+};
+
+// =============================================================================
+// LAZY LOADING: STUDENT SUMMARIES (names + session counts only)
+// =============================================================================
+
+export interface StudentSummary {
+  studentId: string;
+  studentName: string;
+  sessionCount: number;
+}
+
+export const loadStudentSummaries = async (): Promise<StudentSummary[]> => {
+  try {
+    // Fetch only student_id and student_name, then aggregate client-side
+    // This is much lighter than loading full history data
+    const { data, error } = await supabase
+      .from('v_student_roster')
+      .select('student_id, student_name')
+      .limit(2000);
+
+    if (error) {
+      console.error('Error loading student summaries:', error);
+      return [];
+    }
+
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    // Aggregate by student to get session counts
+    const studentMap = new Map<string, { name: string; count: number }>();
+
+    for (const row of data) {
+      const existing = studentMap.get(row.student_id);
+      if (existing) {
+        existing.count++;
+      } else {
+        studentMap.set(row.student_id, { name: row.student_name, count: 1 });
+      }
+    }
+
+    // Convert to array and sort by name
+    const summaries: StudentSummary[] = Array.from(studentMap.entries())
+      .map(([studentId, { name, count }]) => ({
+        studentId,
+        studentName: name,
+        sessionCount: count,
+      }))
+      .sort((a, b) => a.studentName.localeCompare(b.studentName));
+
+    console.log(`📋 Loaded ${summaries.length} student summaries (lightweight)`);
+    return summaries;
+  } catch (error) {
+    console.error('Fatal error loading student summaries:', error);
+    return [];
+  }
+};
+
+// =============================================================================
+// LAZY LOADING: SINGLE STUDENT HISTORY
+// =============================================================================
+
+export const loadStudentHistoryById = async (studentId: string): Promise<HistoryEntry[]> => {
+  try {
+    console.log(`📖 Loading history for student: ${studentId}`);
+
+    // Fetch only this student's data
+    const { data: progressData, error } = await supabase
+      .from('v_student_roster')
+      .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated, assigned_at')
+      .eq('student_id', studentId)
+      .order('last_updated', { ascending: false });
+
+    if (error) {
+      console.error('Error loading student history:', error);
+      return [];
+    }
+
+    if (!progressData || progressData.length === 0) {
+      return [];
+    }
+
+    // Load theme data for challenge names
+    const themeIds = [...new Set((progressData as RosterViewRow[]).map(r => r.theme_id))];
+    const { data: allThemes } = await supabase
+      .from('themes')
+      .select('id, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5, created_at')
+      .in('id', themeIds);
+
+    const themeMap = new Map(allThemes?.map(t => [t.id, t]) || []);
+
+    // Build history entries
+    const history: HistoryEntry[] = [];
+
+    for (const row of progressData as RosterViewRow[]) {
+      if (!row.last_updated) continue;
+
+      const themeData = themeMap.get(row.theme_id);
+      if (!themeData) continue;
+
+      const allChallenges = [
+        themeData.challenge_1,
+        themeData.challenge_2,
+        themeData.challenge_3,
+        themeData.challenge_4,
+        themeData.challenge_5
+      ];
+
+      const completedChallenges: string[] = [];
+      if (row.c1) completedChallenges.push(allChallenges[0]);
+      if (row.c2) completedChallenges.push(allChallenges[1]);
+      if (row.c3) completedChallenges.push(allChallenges[2]);
+      if (row.c4) completedChallenges.push(allChallenges[3]);
+      if (row.c5) completedChallenges.push(allChallenges[4]);
+
+      const date = new Date(row.last_updated);
+
+      history.push({
+        id: `${row.student_id}_${row.theme_id}_${date.toISOString()}`,
+        studentName: row.student_name,
+        className: row.class_session_name,
+        weekName: `Session ${date.toLocaleDateString()}`,
+        weekTheme: row.theme_name,
+        challenges: completedChallenges,
+        allAvailableChallenges: allChallenges,
+        date: row.last_updated,
+        themeCreatedAt: themeData.created_at || undefined,
+      });
+    }
+
+    console.log(`✅ Loaded ${history.length} history entries for student`);
+    return history;
+  } catch (error) {
+    console.error('Fatal error loading student history:', error);
     return [];
   }
 };

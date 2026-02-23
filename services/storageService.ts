@@ -1,1 +1,2 @@
-export { loadState, saveState, loadHistory, saveHistory, getAllStudentsFromDB, deleteStudent, deleteTheme, loadPublicViewState, getPublicSettings, loadStudentSearchHistory, updatePublicSettings, updateStudentProgress, updateThemeCategory, clearStateCache } from './supabaseService';
+export { loadState, saveState, loadHistory, saveHistory, getAllStudentsFromDB, deleteStudent, deleteTheme, loadPublicViewState, getPublicSettings, loadStudentSearchHistory, updatePublicSettings, updateStudentProgress, updateThemeCategory, clearStateCache, loadStudentSummaries, loadStudentHistoryById, loadHistoryPaginated } from './supabaseService';
+export type { StudentSummary, PaginatedHistoryResult } from './supabaseService';

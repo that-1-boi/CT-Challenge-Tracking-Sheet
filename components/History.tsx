@@ -1,19 +1,29 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { loadHistory, saveHistory, loadState, saveState } from '../services/storageService';
+import { loadHistoryPaginated, saveHistory, loadState, saveState } from '../services/storageService';
 import { HistoryEntry, AppState } from '../types';
 import { subscribeSyncEvent, getLastSyncTimestamp } from '../services/syncEvents';
 import * as XLSX from 'xlsx';
 
+const PAGE_SIZE = 20;
+
 // Cache history data in localStorage to prevent excessive reads
 const HISTORY_CACHE_KEY = 'ct_history_page_cache';
 const HISTORY_TIMESTAMP_KEY = 'ct_history_page_cache_timestamp';
+const HISTORY_META_KEY = 'ct_history_page_meta';
 
-function getCachedHistory(): HistoryEntry[] | null {
+interface HistoryCacheMeta {
+  totalCount: number;
+  loadedCount: number;
+  hasMore: boolean;
+}
+
+function getCachedHistory(): { entries: HistoryEntry[]; meta: HistoryCacheMeta } | null {
   try {
     const cached = localStorage.getItem(HISTORY_CACHE_KEY);
     const timestamp = localStorage.getItem(HISTORY_TIMESTAMP_KEY);
-    if (!cached || !timestamp) return null;
+    const metaStr = localStorage.getItem(HISTORY_META_KEY);
+    if (!cached || !timestamp || !metaStr) return null;
 
     const cacheTime = parseInt(timestamp, 10);
     const lastSync = getLastSyncTimestamp();
@@ -25,15 +35,19 @@ function getCachedHistory(): HistoryEntry[] | null {
     }
 
     console.log('History: Using cached data');
-    return JSON.parse(cached);
+    return {
+      entries: JSON.parse(cached),
+      meta: JSON.parse(metaStr)
+    };
   } catch {
     return null;
   }
 }
 
-function setCachedHistory(data: HistoryEntry[]): void {
+function setCachedHistory(entries: HistoryEntry[], meta: HistoryCacheMeta): void {
   try {
-    localStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify(entries));
+    localStorage.setItem(HISTORY_META_KEY, JSON.stringify(meta));
     localStorage.setItem(HISTORY_TIMESTAMP_KEY, Date.now().toString());
     console.log('History: Data cached');
   } catch (error) {
@@ -41,51 +55,92 @@ function setCachedHistory(data: HistoryEntry[]): void {
   }
 }
 
+function clearHistoryCache(): void {
+  localStorage.removeItem(HISTORY_CACHE_KEY);
+  localStorage.removeItem(HISTORY_META_KEY);
+  localStorage.removeItem(HISTORY_TIMESTAMP_KEY);
+}
+
 const History: React.FC = () => {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('All');
   const [editingEntry, setEditingEntry] = useState<HistoryEntry | null>(null);
 
-  // Load history - checks cache first, only fetches from DB if needed
-  const loadHistoryData = useCallback(async (forceRefresh = false) => {
+  // Load initial page - checks cache first
+  const loadInitialData = useCallback(async (forceRefresh = false) => {
     // Check cache first (unless forcing refresh)
     if (!forceRefresh) {
       const cached = getCachedHistory();
       if (cached) {
-        setHistory(cached);
+        setHistory(cached.entries);
+        setHasMore(cached.meta.hasMore);
+        setTotalCount(cached.meta.totalCount);
         setLoading(false);
         return;
       }
     }
 
-    // Fetch from database
-    console.log('History: Loading from database...');
+    // Fetch first page from database
+    console.log('History: Loading first page from database...');
+    setLoading(true);
     try {
-      const loadedHistory = await loadHistory();
-      setHistory(loadedHistory);
-      setCachedHistory(loadedHistory);
-      setLoading(false);
+      const result = await loadHistoryPaginated(0, PAGE_SIZE);
+      setHistory(result.entries);
+      setHasMore(result.hasMore);
+      setTotalCount(result.totalCount);
+      setCachedHistory(result.entries, {
+        totalCount: result.totalCount,
+        loadedCount: result.entries.length,
+        hasMore: result.hasMore
+      });
     } catch (error) {
       console.error('Error loading history:', error);
+    } finally {
       setLoading(false);
     }
   }, []);
 
+  // Load more entries
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+
+    setLoadingMore(true);
+    try {
+      const result = await loadHistoryPaginated(history.length, PAGE_SIZE);
+      const newHistory = [...history, ...result.entries];
+      setHistory(newHistory);
+      setHasMore(result.hasMore);
+      setCachedHistory(newHistory, {
+        totalCount: result.totalCount,
+        loadedCount: newHistory.length,
+        hasMore: result.hasMore
+      });
+    } catch (error) {
+      console.error('Error loading more history:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [history, hasMore, loadingMore]);
+
   // Initial load
   useEffect(() => {
-    loadHistoryData();
-  }, [loadHistoryData]);
+    loadInitialData();
+  }, [loadInitialData]);
 
   // Listen for sync events to refresh data
   useEffect(() => {
     const unsubscribe = subscribeSyncEvent(() => {
       console.log('History: Sync event received, refreshing data...');
-      loadHistoryData(true); // Force refresh from DB
+      clearHistoryCache();
+      loadInitialData(true); // Force refresh from DB
     });
     return unsubscribe;
-  }, [loadHistoryData]);
+  }, [loadInitialData]);
 
   const classes = ['All', ...Array.from(new Set(history.map(h => h.className)))];
 
@@ -186,7 +241,9 @@ const History: React.FC = () => {
       <div className="border-b-2 border-[#f4c514] pb-4 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-black text-[#333] tracking-tighter italic uppercase">Session History</h1>
-          <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Audit archive for all session records</p>
+          <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">
+            Showing {history.length} of {totalCount} records
+          </p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
@@ -256,7 +313,7 @@ const History: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="p-12 text-center text-gray-400 font-bold uppercase text-[10px] tracking-widest italic">
+                  <td colSpan={4} className="p-12 text-center text-gray-400 font-bold uppercase text-[10px] tracking-widest italic">
                     No results
                   </td>
                 </tr>
@@ -264,6 +321,39 @@ const History: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Load More Button */}
+        {hasMore && !searchTerm && selectedClass === 'All' && (
+          <div className="p-4 border-t border-[#ffe5a0] bg-[#fff8e8]">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="w-full py-3 bg-black text-[#f4c514] font-black uppercase tracking-widest text-xs rounded-sm hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loadingMore ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-[#f4c514] border-t-transparent rounded-full animate-spin"></div>
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-chevron-down"></i>
+                  Load More ({totalCount - history.length} remaining)
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Note when filtering */}
+        {(searchTerm || selectedClass !== 'All') && hasMore && (
+          <div className="p-3 border-t border-[#ffe5a0] bg-[#fff8e8] text-center">
+            <p className="text-[10px] text-gray-500 font-bold uppercase">
+              <i className="fas fa-info-circle mr-1"></i>
+              Filtering {history.length} loaded records. Clear filters to load more.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
