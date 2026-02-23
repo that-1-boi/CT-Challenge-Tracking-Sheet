@@ -209,8 +209,8 @@ const StudentSearch: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8 w-full animate-in fade-in duration-500">
-      <div className="border-b-2 border-[#f4c514] pb-2 flex items-end justify-between">
+    <div className="w-full animate-in fade-in duration-500 lg:h-[calc(100vh-120px)] lg:flex lg:flex-col">
+      <div className="border-b-2 border-[#f4c514] pb-2 mb-4 sm:mb-8 flex items-end justify-between flex-shrink-0">
         <div>
           <h1 className="text-3xl md:text-4xl font-black text-[#333] tracking-tighter italic uppercase">Mastery Profiles</h1>
           <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Student achievement data</p>
@@ -221,9 +221,9 @@ const StudentSearch: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 sm:gap-8 lg:items-start">
-        {/* Search Column - sticky on desktop, suggestions hidden on mobile */}
-        <div className="w-full lg:w-1/3 space-y-4 lg:sticky lg:top-4 lg:self-start">
+      <div className="flex flex-col lg:flex-row gap-4 sm:gap-8 lg:flex-1 lg:min-h-0">
+        {/* Search Column - fixed on desktop, suggestions hidden on mobile */}
+        <div className="w-full lg:w-1/3 space-y-4 lg:h-full lg:flex lg:flex-col flex-shrink-0">
           <div className="relative">
             <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
             <input
@@ -264,7 +264,7 @@ const StudentSearch: React.FC = () => {
           </div>
 
           {/* Suggested students list - hidden on mobile (< 1024px / lg breakpoint) */}
-          <div className="hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[calc(100vh-180px)] overflow-y-auto shadow-sm custom-scrollbar">
+          <div className="hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] flex-1 overflow-y-auto shadow-sm custom-scrollbar">
             {filteredSummaries.length > 0 ? (
               filteredSummaries.map(summary => (
                 <button
@@ -284,8 +284,8 @@ const StudentSearch: React.FC = () => {
           </div>
         </div>
 
-        {/* Details Column */}
-        <div className="flex-1 space-y-6">
+        {/* Details Column - scrollable on desktop */}
+        <div className="flex-1 space-y-6 lg:overflow-y-auto lg:h-full custom-scrollbar">
           {selectedStudentId && selectedStudentName ? (
             <div className="animate-in slide-in-from-right-4 duration-300">
               <div className="bg-black p-6 text-white rounded-sm shadow-xl relative overflow-hidden border-b-8 border-[#f4c514]">
