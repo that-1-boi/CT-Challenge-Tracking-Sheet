@@ -223,7 +223,7 @@ const StudentSearch: React.FC = () => {
 
       <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 lg:items-start">
         {/* Search Column - sticky on desktop, scrolls with page then sticks near top */}
-        <div className="w-full lg:w-[200px] xl:w-[240px] space-y-3 lg:sticky lg:top-4 lg:self-start flex-shrink-0">
+        <div className="w-full lg:w-[200px] xl:w-[240px] space-y-3 lg:sticky lg:top-4 lg:self-start flex-shrink-0 lg:bg-white lg:py-2 lg:-my-2">
           <div className="relative">
             <i className="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]"></i>
             <input

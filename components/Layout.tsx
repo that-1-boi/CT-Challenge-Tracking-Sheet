@@ -55,7 +55,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   });
 
   return (
-    <div className="min-h-screen flex bg-white w-full overflow-x-hidden">
+    <div className="min-h-screen flex bg-white w-full overflow-x-clip">
       {/* Mobile Overlay */}
       {isMobile && sidebarOpen && (
         <div
