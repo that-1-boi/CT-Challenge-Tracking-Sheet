@@ -209,8 +209,8 @@ const StudentSearch: React.FC = () => {
   }
 
   return (
-    <div className="w-full animate-in fade-in duration-500 lg:h-[calc(100vh-120px)] lg:flex lg:flex-col">
-      <div className="border-b-2 border-[#f4c514] pb-2 mb-4 sm:mb-8 flex items-end justify-between flex-shrink-0">
+    <div className="w-full animate-in fade-in duration-500">
+      <div className="border-b-2 border-[#f4c514] pb-2 mb-4 sm:mb-8 flex items-end justify-between">
         <div>
           <h1 className="text-3xl md:text-4xl font-black text-[#333] tracking-tighter italic uppercase">Mastery Profiles</h1>
           <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Student achievement data</p>
@@ -221,15 +221,15 @@ const StudentSearch: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 sm:gap-8 lg:flex-1 lg:min-h-0">
-        {/* Search Column - fixed on desktop, suggestions hidden on mobile */}
-        <div className="w-full lg:w-1/3 space-y-4 lg:h-full lg:flex lg:flex-col flex-shrink-0">
+      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 lg:items-start">
+        {/* Search Column - sticky on desktop, thinner width */}
+        <div className="w-full lg:w-[200px] xl:w-[240px] space-y-3 lg:sticky lg:top-4 flex-shrink-0">
           <div className="relative">
-            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+            <i className="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]"></i>
             <input
               type="text"
-              placeholder="Filter names..."
-              className="w-full bg-[#fff1d1] border border-[#f4c514] p-3 pl-10 font-bold text-gray-800 focus:outline-none text-sm capitalize placeholder:text-gray-400"
+              placeholder="Filter..."
+              className="w-full bg-[#fff1d1] border border-[#f4c514] p-2 pl-8 font-bold text-gray-800 focus:outline-none text-xs capitalize placeholder:text-gray-400"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onFocus={() => setSearchFocused(true)}
@@ -264,28 +264,28 @@ const StudentSearch: React.FC = () => {
           </div>
 
           {/* Suggested students list - hidden on mobile (< 1024px / lg breakpoint) */}
-          <div className="hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] flex-1 overflow-y-auto shadow-sm custom-scrollbar">
+          <div className="hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[calc(100vh-140px)] overflow-y-auto shadow-sm custom-scrollbar">
             {filteredSummaries.length > 0 ? (
               filteredSummaries.map(summary => (
                 <button
                   key={summary.studentId}
                   onClick={() => handleSelectStudent(summary.studentId, summary.studentName)}
-                  className={`w-full text-left p-3 font-black uppercase text-xs hover:bg-[#f4c514] transition-colors flex items-center justify-between group ${selectedStudentId === summary.studentId ? 'bg-[#f4c514]' : ''}`}
+                  className={`w-full text-left p-2 font-black uppercase text-[10px] hover:bg-[#f4c514] transition-colors flex items-center justify-between group ${selectedStudentId === summary.studentId ? 'bg-[#f4c514]' : ''}`}
                 >
                   <span>{summary.studentName}</span>
-                  <i className={`fas fa-chevron-right text-[10px] transition-transform ${selectedStudentId === summary.studentId ? 'translate-x-0' : '-translate-x-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0'}`}></i>
+                  <i className={`fas fa-chevron-right text-[8px] transition-transform ${selectedStudentId === summary.studentId ? 'translate-x-0' : '-translate-x-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0'}`}></i>
                 </button>
               ))
             ) : (
-              <div className="p-12 text-center text-gray-400 italic text-[10px] uppercase tracking-widest">
-                No matches found
+              <div className="p-6 text-center text-gray-400 italic text-[9px] uppercase tracking-wider">
+                No matches
               </div>
             )}
           </div>
         </div>
 
-        {/* Details Column - scrollable on desktop */}
-        <div className="flex-1 space-y-6 lg:overflow-y-auto lg:h-full custom-scrollbar">
+        {/* Details Column */}
+        <div className="flex-1 space-y-6 min-w-0">
           {selectedStudentId && selectedStudentName ? (
             <div className="animate-in slide-in-from-right-4 duration-300">
               <div className="bg-black p-6 text-white rounded-sm shadow-xl relative overflow-hidden border-b-8 border-[#f4c514]">
