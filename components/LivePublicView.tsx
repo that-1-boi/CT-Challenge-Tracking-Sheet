@@ -7,7 +7,6 @@ const LivePublicView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedChallenge, setSelectedChallenge] = useState<string | null>(null);
 
   // Track user's manual class selection separately
   const userSelectedClassId = useRef<string | null>(null);
@@ -145,11 +144,6 @@ const LivePublicView: React.FC = () => {
     activeTheme?.classes.find(c => c.id !== 'unassigned') ||
     activeTheme?.classes[0];
 
-  const openChallengeDetails = (index: number) => {
-    if (!activeTheme) return;
-    setSelectedChallenge(activeTheme.challenges[index]);
-  };
-
   if (!activeTheme || !currentClass) {
     return (
       <div className="h-screen flex items-center justify-center bg-white">
@@ -166,47 +160,6 @@ const LivePublicView: React.FC = () => {
 
   return (
     <div className="w-full max-w-[1400px] mx-auto px-1 sm:px-4 md:px-8 animate-in fade-in duration-1000 overflow-hidden">
-      {/* Challenge Info Modal */}
-      {selectedChallenge && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-6 md:p-12 bg-black/70 backdrop-blur-sm animate-in fade-in duration-300"
-          onClick={() => setSelectedChallenge(null)}
-        >
-          <div
-            className="bg-white max-w-2xl w-full rounded-sm overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-300 relative flex flex-col border-4 border-black"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="bg-black p-4 md:p-5 flex items-center justify-between z-10 border-b-4 border-[#f4c514]">
-              <div>
-                <h3 className="text-xl md:text-3xl font-black uppercase italic tracking-tighter text-[#f4c514] leading-tight">{selectedChallenge}</h3>
-                <p className="text-[9px] font-black text-white/50 tracking-[0.2em] uppercase mt-1">Challenge Details</p>
-              </div>
-              <button
-                onClick={() => setSelectedChallenge(null)}
-                className="w-10 h-10 md:w-12 md:h-12 bg-[#f4c514] text-black flex items-center justify-center shadow-lg hover:bg-white hover:scale-105 transition-all ml-4"
-              >
-                <i className="fas fa-times text-xl md:text-2xl"></i>
-              </button>
-            </div>
-
-            {/* Bottom Status Bar */}
-            <div className="bg-black p-3 flex items-center justify-between px-6">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-[9px] font-black uppercase text-white/40 tracking-widest">Challenge View</span>
-              </div>
-              <button
-                onClick={() => setSelectedChallenge(null)}
-                className="text-[#f4c514] font-black uppercase tracking-widest text-[9px] hover:text-white transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Header - responsive and compact on landscape phones */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-2 landscape-phone:mb-1 sm:mb-6 gap-1 landscape-phone:gap-1 sm:gap-4 border-b-2 sm:border-b-4 border-black pb-1 landscape-phone:pb-1 sm:pb-4">
         <div className="flex-1 min-w-0">
@@ -249,12 +202,11 @@ const LivePublicView: React.FC = () => {
                 {activeTheme.challenges.map((chName, i) => (
                   <th
                     key={i}
-                    onClick={() => openChallengeDetails(i)}
-                    className="p-0.5 landscape-phone:p-0.5 sm:p-3 md:p-4 border-r border-black/10 text-center w-[13%] cursor-pointer group/header hover:bg-black transition-colors"
+                    className="p-0.5 landscape-phone:p-0.5 sm:p-3 md:p-4 border-r border-black/10 text-center w-[13%]"
                   >
                     <div className="flex flex-col items-center">
-                      <span className="text-black group-hover/header:text-[#f4c514] font-black text-[8px] landscape-phone:text-[8px] sm:text-base uppercase tracking-tighter transition-colors">C{i + 1}</span>
-                      <span className="text-[7px] sm:text-[11px] text-black group-hover/header:text-white font-bold uppercase truncate max-w-[30px] sm:max-w-[110px] leading-tight opacity-90 transition-colors hidden sm:block landscape-phone:hidden">{chName}</span>
+                      <span className="text-black font-black text-[8px] landscape-phone:text-[8px] sm:text-base uppercase tracking-tighter">C{i + 1}</span>
+                      <span className="text-[7px] sm:text-[11px] text-black font-bold uppercase truncate max-w-[30px] sm:max-w-[110px] leading-tight opacity-90 hidden sm:block landscape-phone:hidden">{chName}</span>
                     </div>
                   </th>
                 ))}
