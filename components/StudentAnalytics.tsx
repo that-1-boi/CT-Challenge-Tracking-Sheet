@@ -7,94 +7,92 @@ import {
   StudentThemeScore,
 } from '../services/analyticsTypes';
 import { subscribeSyncEvent } from '../services/syncEvents';
+import { loadStudentAttributes, saveStudentAttributes } from '../services/supabaseService';
 
 // ============================================================================
-// STUDENT ATTRIBUTES TYPES AND STORAGE
+// STUDENT ATTRIBUTES TYPES (Database-backed, Fixed 6-axis)
 // ============================================================================
 
-interface StudentAttribute {
-  name: string;
-  value: number; // 0-100 scale
+// Attribute names for radar chart display
+const ATTRIBUTE_LABELS = {
+  curvedScore: 'Curved Score',
+  competitiveness: 'Competitiveness',
+  independence: 'Independence',
+  teamwork: 'Teamwork',
+  performance: 'Performance',
+  coachability: 'Coachability',
+} as const;
+
+// State for student attributes (loaded from database)
+interface StudentAttributesState {
+  competitiveness: number;
+  independence: number;
+  teamwork: number;
+  performance: number;
+  coachability: number;
+  comments: string;
+  isLoading: boolean;
+  hasUnsavedChanges: boolean;
+  error: string | null;
 }
 
-interface StudentCustomData {
-  attributes: StudentAttribute[];
-  notes: string;
-}
-
-// Default attributes for new students (starts with 3 for proper radar display, expandable to 8)
-// Note: Radar charts require minimum 3 points to form a polygon
-const DEFAULT_ATTRIBUTES: StudentAttribute[] = [
-  { name: 'Teamwork', value: 50 },
-  { name: 'Problem Solving', value: 50 },
-  { name: 'Communication', value: 50 },
-];
-
-// LocalStorage key for student custom data
-const STUDENT_DATA_KEY = 'ct_student_custom_data';
-
-function loadStudentCustomData(): Record<string, StudentCustomData> {
-  try {
-    const stored = localStorage.getItem(STUDENT_DATA_KEY);
-    return stored ? JSON.parse(stored) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveStudentCustomData(data: Record<string, StudentCustomData>): void {
-  try {
-    localStorage.setItem(STUDENT_DATA_KEY, JSON.stringify(data));
-  } catch (error) {
-    console.error('Error saving student custom data:', error);
-  }
-}
-
-function getStudentData(studentId: string): StudentCustomData {
-  const allData = loadStudentCustomData();
-  return allData[studentId] || { attributes: [...DEFAULT_ATTRIBUTES], notes: '' };
-}
-
-function updateStudentData(studentId: string, data: Partial<StudentCustomData>): void {
-  const allData = loadStudentCustomData();
-  const current = allData[studentId] || { attributes: [...DEFAULT_ATTRIBUTES], notes: '' };
-  allData[studentId] = { ...current, ...data };
-  saveStudentCustomData(allData);
-}
+const DEFAULT_ATTRIBUTES_STATE: StudentAttributesState = {
+  competitiveness: 50,
+  independence: 50,
+  teamwork: 50,
+  performance: 50,
+  coachability: 50,
+  comments: '',
+  isLoading: false,
+  hasUnsavedChanges: false,
+  error: null,
+};
 
 // ============================================================================
-// DYNAMIC RADAR CHART COMPONENT (supports 3-8 attributes)
+// FIXED 6-AXIS RADAR CHART COMPONENT
 // ============================================================================
 
 interface RadarChartProps {
-  attributes: StudentAttribute[];
-  onAttributeChange: (index: number, value: number) => void;
-  onAttributeNameChange: (index: number, name: string) => void;
-  onAddAttribute: () => void;
-  onRemoveAttribute: (index: number) => void;
+  curvedScore: number;      // Read-only, from analytics (0-100)
+  competitiveness: number;  // Editable (0-100)
+  independence: number;     // Editable (0-100)
+  teamwork: number;         // Editable (0-100)
+  performance: number;      // Editable (0-100)
+  coachability: number;     // Editable (0-100)
+  onAttributeChange: (attribute: string, value: number) => void;
   editable?: boolean;
 }
 
 const RadarChart: React.FC<RadarChartProps> = ({
-  attributes,
+  curvedScore,
+  competitiveness,
+  independence,
+  teamwork,
+  performance,
+  coachability,
   onAttributeChange,
-  onAttributeNameChange,
-  onAddAttribute,
-  onRemoveAttribute,
   editable = true,
 }) => {
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editingName, setEditingName] = useState('');
+  // Build fixed 6-axis attributes array
+  const attributes = [
+    { name: 'Curved Score', value: curvedScore, editable: false },
+    { name: 'Competitive', value: competitiveness, editable: true, key: 'competitiveness' },
+    { name: 'Independence', value: independence, editable: true, key: 'independence' },
+    { name: 'Teamwork', value: teamwork, editable: true, key: 'teamwork' },
+    { name: 'Performance', value: performance, editable: true, key: 'performance' },
+    { name: 'Coachability', value: coachability, editable: true, key: 'coachability' },
+  ];
 
   // Chart dimensions
   const size = 280;
   const center = size / 2;
   const maxRadius = 100;
   const levels = 5; // Number of concentric rings
+  const numAxes = 6;
 
   // Calculate points for polygon
-  const getPoint = (index: number, value: number, total: number) => {
-    const angle = (Math.PI * 2 * index) / total - Math.PI / 2; // Start from top
+  const getPoint = (index: number, value: number) => {
+    const angle = (Math.PI * 2 * index) / numAxes - Math.PI / 2; // Start from top
     const radius = (value / 100) * maxRadius;
     return {
       x: center + radius * Math.cos(angle),
@@ -105,7 +103,7 @@ const RadarChart: React.FC<RadarChartProps> = ({
   // Generate polygon points string
   const polygonPoints = attributes
     .map((attr, i) => {
-      const point = getPoint(i, attr.value, attributes.length);
+      const point = getPoint(i, attr.value);
       return `${point.x},${point.y}`;
     })
     .join(' ');
@@ -115,29 +113,11 @@ const RadarChart: React.FC<RadarChartProps> = ({
     const levelValue = ((i + 1) / levels) * 100;
     return attributes
       .map((_, attrIndex) => {
-        const point = getPoint(attrIndex, levelValue, attributes.length);
+        const point = getPoint(attrIndex, levelValue);
         return `${point.x},${point.y}`;
       })
       .join(' ');
   });
-
-  // Handle name edit
-  const startEditingName = (index: number) => {
-    if (!editable) return;
-    setEditingIndex(index);
-    setEditingName(attributes[index].name);
-  };
-
-  const finishEditingName = () => {
-    if (editingIndex !== null && editingName.trim()) {
-      onAttributeNameChange(editingIndex, editingName.trim());
-    }
-    setEditingIndex(null);
-    setEditingName('');
-  };
-
-  const canAddMore = attributes.length < 8;
-  const canRemove = attributes.length > 3;
 
   return (
     <div className="flex flex-col items-center">
@@ -155,7 +135,7 @@ const RadarChart: React.FC<RadarChartProps> = ({
 
         {/* Axis lines */}
         {attributes.map((_, i) => {
-          const point = getPoint(i, 100, attributes.length);
+          const point = getPoint(i, 100);
           return (
             <line
               key={`axis-${i}`}
@@ -180,97 +160,78 @@ const RadarChart: React.FC<RadarChartProps> = ({
 
         {/* Data points */}
         {attributes.map((attr, i) => {
-          const point = getPoint(i, attr.value, attributes.length);
+          const point = getPoint(i, attr.value);
           return (
             <circle
               key={`point-${i}`}
               cx={point.x}
               cy={point.y}
               r="6"
-              fill="#f4c514"
+              fill={attr.editable ? "#f4c514" : "#6b7280"}
               stroke="white"
               strokeWidth="2"
-              className="cursor-pointer hover:r-8 transition-all"
             />
           );
         })}
 
         {/* Labels */}
         {attributes.map((attr, i) => {
-          const labelPoint = getPoint(i, 125, attributes.length);
-          const isEditing = editingIndex === i;
-
+          const labelPoint = getPoint(i, 125);
           return (
-            <g key={`label-${i}`}>
-              {isEditing ? (
-                <foreignObject
-                  x={labelPoint.x - 50}
-                  y={labelPoint.y - 12}
-                  width="100"
-                  height="24"
-                >
-                  <input
-                    type="text"
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    onBlur={finishEditingName}
-                    onKeyDown={(e) => e.key === 'Enter' && finishEditingName()}
-                    autoFocus
-                    className="w-full text-[10px] font-bold text-center bg-white border border-[#f4c514] rounded px-1 py-0.5 outline-none"
-                  />
-                </foreignObject>
-              ) : (
-                <text
-                  x={labelPoint.x}
-                  y={labelPoint.y}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className={`text-[10px] font-black uppercase fill-gray-700 ${editable ? 'cursor-pointer hover:fill-[#f4c514]' : ''}`}
-                  onClick={() => startEditingName(i)}
-                >
-                  {attr.name}
-                </text>
-              )}
-            </g>
+            <text
+              key={`label-${i}`}
+              x={labelPoint.x}
+              y={labelPoint.y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              className={`text-[9px] font-black uppercase ${attr.editable ? 'fill-gray-700' : 'fill-gray-400'}`}
+            >
+              {attr.name}
+            </text>
           );
         })}
       </svg>
 
-      {/* Attribute sliders */}
+      {/* Attribute sliders - only for editable attributes */}
       {editable && (
         <div className="w-full mt-4 space-y-2">
-          {attributes.map((attr, i) => (
-            <div key={`slider-${i}`} className="flex items-center gap-2">
-              <span className="text-[9px] font-bold text-gray-500 w-24 truncate uppercase">{attr.name}</span>
+          {/* Curved Score - Read Only Display */}
+          <div className="flex items-center gap-2 opacity-60">
+            <span className="text-[9px] font-bold text-gray-400 w-28 truncate uppercase">Curved Score</span>
+            <div className="flex-1 h-1.5 bg-gray-200 rounded-lg overflow-hidden">
+              <div
+                className="h-full bg-gray-400 rounded-lg transition-all"
+                style={{ width: `${Math.min(100, curvedScore)}%` }}
+              />
+            </div>
+            <span className="text-[10px] font-black text-gray-400 w-8 text-right">{Math.round(curvedScore)}</span>
+          </div>
+
+          {/* Editable Attributes */}
+          {[
+            { key: 'competitiveness', label: 'Competitive', value: competitiveness },
+            { key: 'independence', label: 'Independence', value: independence },
+            { key: 'teamwork', label: 'Teamwork', value: teamwork },
+            { key: 'performance', label: 'Performance', value: performance },
+            { key: 'coachability', label: 'Coachability', value: coachability },
+          ].map((attr) => (
+            <div key={attr.key} className="flex items-center gap-2">
+              <span className="text-[9px] font-bold text-gray-500 w-28 truncate uppercase">
+                {attr.label}
+              </span>
               <input
                 type="range"
                 min="0"
                 max="100"
                 value={attr.value}
-                onChange={(e) => onAttributeChange(i, parseInt(e.target.value))}
+                onChange={(e) => onAttributeChange(attr.key, parseInt(e.target.value))}
                 className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#f4c514]"
               />
-              <span className="text-[10px] font-black text-[#f4c514] w-8 text-right">{attr.value}</span>
-              {canRemove && (
-                <button
-                  onClick={() => onRemoveAttribute(i)}
-                  className="text-gray-400 hover:text-red-500 transition-colors"
-                  title="Remove attribute"
-                >
-                  <i className="fas fa-times text-[10px]"></i>
-                </button>
-              )}
+              <span className="text-[10px] font-black text-[#f4c514] w-8 text-right">
+                {attr.value}
+              </span>
             </div>
           ))}
-
-          {canAddMore && (
-            <button
-              onClick={onAddAttribute}
-              className="w-full mt-2 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-500 border border-dashed border-gray-300 rounded hover:border-[#f4c514] hover:text-[#f4c514] transition-colors"
-            >
-              <i className="fas fa-plus mr-1"></i> Add Attribute ({attributes.length}/8)
-            </button>
-          )}
         </div>
       )}
     </div>
@@ -1332,60 +1293,96 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
 };
 
 // ============================================================================
-// STUDENT PROFILE CARD
+// STUDENT PROFILE CARD (with lazy loading from database)
 // ============================================================================
 
 const StudentProfileCard: React.FC<{
   profile: StudentProfile;
   onClose: () => void;
 }> = ({ profile, onClose }) => {
-  // Load and manage student custom data (attributes + notes)
-  const [customData, setCustomData] = useState<StudentCustomData>(() =>
-    getStudentData(profile.studentId)
-  );
+  // State for database-backed attributes
+  const [attributesState, setAttributesState] = useState<StudentAttributesState>(DEFAULT_ATTRIBUTES_STATE);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Update customData when profile changes
+  // Lazy load attributes when student profile is selected
   useEffect(() => {
-    setCustomData(getStudentData(profile.studentId));
+    const fetchAttributes = async () => {
+      setAttributesState(prev => ({ ...prev, isLoading: true, error: null }));
+
+      try {
+        const data = await loadStudentAttributes(profile.studentId);
+
+        if (data) {
+          setAttributesState({
+            competitiveness: data.competitiveness,
+            independence: data.independence,
+            teamwork: data.teamwork,
+            performance: data.performance,
+            coachability: data.coachability,
+            comments: data.comments,
+            isLoading: false,
+            hasUnsavedChanges: false,
+            error: null,
+          });
+        } else {
+          // Use defaults for students without saved attributes
+          setAttributesState({
+            ...DEFAULT_ATTRIBUTES_STATE,
+            isLoading: false,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load student attributes:', error);
+        setAttributesState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: 'Failed to load attributes',
+        }));
+      }
+    };
+
+    fetchAttributes();
   }, [profile.studentId]);
 
-  // Attribute handlers
-  const handleAttributeChange = (index: number, value: number) => {
-    const newAttributes = [...customData.attributes];
-    newAttributes[index] = { ...newAttributes[index], value };
-    const newData = { ...customData, attributes: newAttributes };
-    setCustomData(newData);
-    updateStudentData(profile.studentId, newData);
+  // Handle attribute slider changes
+  const handleAttributeChange = (attribute: string, value: number) => {
+    setAttributesState(prev => ({
+      ...prev,
+      [attribute]: value,
+      hasUnsavedChanges: true,
+    }));
   };
 
-  const handleAttributeNameChange = (index: number, name: string) => {
-    const newAttributes = [...customData.attributes];
-    newAttributes[index] = { ...newAttributes[index], name };
-    const newData = { ...customData, attributes: newAttributes };
-    setCustomData(newData);
-    updateStudentData(profile.studentId, newData);
+  // Handle comments changes
+  const handleNotesChange = (comments: string) => {
+    setAttributesState(prev => ({
+      ...prev,
+      comments,
+      hasUnsavedChanges: true,
+    }));
   };
 
-  const handleAddAttribute = () => {
-    if (customData.attributes.length >= 8) return;
-    const newAttributes = [...customData.attributes, { name: `Skill ${customData.attributes.length + 1}`, value: 50 }];
-    const newData = { ...customData, attributes: newAttributes };
-    setCustomData(newData);
-    updateStudentData(profile.studentId, newData);
-  };
+  // Save attributes to database
+  const handleSaveAttributes = async () => {
+    setIsSaving(true);
 
-  const handleRemoveAttribute = (index: number) => {
-    if (customData.attributes.length <= 3) return;
-    const newAttributes = customData.attributes.filter((_, i) => i !== index);
-    const newData = { ...customData, attributes: newAttributes };
-    setCustomData(newData);
-    updateStudentData(profile.studentId, newData);
-  };
+    try {
+      await saveStudentAttributes(profile.studentId, {
+        competitiveness: attributesState.competitiveness,
+        independence: attributesState.independence,
+        teamwork: attributesState.teamwork,
+        performance: attributesState.performance,
+        coachability: attributesState.coachability,
+        comments: attributesState.comments,
+      });
 
-  const handleNotesChange = (notes: string) => {
-    const newData = { ...customData, notes };
-    setCustomData(newData);
-    updateStudentData(profile.studentId, newData);
+      setAttributesState(prev => ({ ...prev, hasUnsavedChanges: false }));
+    } catch (error) {
+      console.error('Failed to save attributes:', error);
+      // Keep hasUnsavedChanges true so user can retry
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -1486,19 +1483,63 @@ const StudentProfileCard: React.FC<{
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6">
         {/* Radar Chart Section */}
         <div className="bg-white border border-slate-200 p-5 rounded-sm shadow-sm">
-          <h3 className="text-xs font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic mb-4">
-            Student Attributes
-          </h3>
-          <RadarChart
-            attributes={customData.attributes}
-            onAttributeChange={handleAttributeChange}
-            onAttributeNameChange={handleAttributeNameChange}
-            onAddAttribute={handleAddAttribute}
-            onRemoveAttribute={handleRemoveAttribute}
-            editable={true}
-          />
-          {/* Notes Section */}
-          <NotesEditor notes={customData.notes} onNotesChange={handleNotesChange} />
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic">
+              Student Attributes
+            </h3>
+            {attributesState.hasUnsavedChanges && (
+              <span className="text-[9px] text-orange-500 font-bold animate-pulse">Unsaved changes</span>
+            )}
+          </div>
+
+          {attributesState.isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="w-8 h-8 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : attributesState.error ? (
+            <div className="flex items-center justify-center h-64 text-red-500 text-sm">
+              {attributesState.error}
+            </div>
+          ) : (
+            <>
+              <RadarChart
+                curvedScore={profile.overallScore}
+                competitiveness={attributesState.competitiveness}
+                independence={attributesState.independence}
+                teamwork={attributesState.teamwork}
+                performance={attributesState.performance}
+                coachability={attributesState.coachability}
+                onAttributeChange={handleAttributeChange}
+                editable={true}
+              />
+
+              {/* Notes Section */}
+              <NotesEditor notes={attributesState.comments} onNotesChange={handleNotesChange} />
+
+              {/* Save Button */}
+              <button
+                onClick={handleSaveAttributes}
+                disabled={!attributesState.hasUnsavedChanges || isSaving}
+                className={`w-full mt-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all rounded-sm ${
+                  attributesState.hasUnsavedChanges
+                    ? 'bg-[#f4c514] text-black hover:bg-black hover:text-[#f4c514] cursor-pointer'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {isSaving ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-save mr-2"></i>
+                    Save Data
+                  </>
+                )}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Performance Line Graph */}

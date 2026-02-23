@@ -46,3 +46,17 @@ export interface HistoryEntry {
   date: string;
   themeCreatedAt?: string; // Theme creation date for sorting by theme order
 }
+
+// Student attributes for analytics radar chart (database-backed)
+export interface StudentAttributes {
+  id?: string;
+  studentId: string;
+  competitiveness: number;  // 0-100
+  independence: number;     // 0-100
+  teamwork: number;         // 0-100
+  performance: number;      // 0-100
+  coachability: number;     // 0-100
+  comments: string;
+  createdAt?: string;
+  updatedAt?: string;
+}

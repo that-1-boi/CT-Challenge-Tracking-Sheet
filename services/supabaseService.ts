@@ -1399,6 +1399,98 @@ export const deleteTheme = async (themeName: string): Promise<void> => {
 };
 
 // =============================================================================
+// STUDENT ATTRIBUTES (Lazy Loading)
+// =============================================================================
+
+export interface StudentAttributesRow {
+  id: string;
+  student_id: string;
+  competitiveness: number;
+  independence: number;
+  teamwork: number;
+  performance: number;
+  coachability: number;
+  comments: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * Load attributes for a single student (lazy loading)
+ * Only called when a student profile is selected
+ */
+export const loadStudentAttributes = async (studentId: string): Promise<StudentAttributesRow | null> => {
+  try {
+    console.log(`📋 Loading attributes for student: ${studentId}`);
+
+    const { data, error } = await supabase
+      .from('student_attributes')
+      .select('id, student_id, competitiveness, independence, teamwork, performance, coachability, comments, created_at, updated_at')
+      .eq('student_id', studentId)
+      .single();
+
+    if (error) {
+      // PGRST116 means no rows found - return null (student has no attributes yet)
+      if (error.code === 'PGRST116') {
+        console.log(`ℹ No attributes found for student ${studentId}, will use defaults`);
+        return null;
+      }
+      console.error('Error loading student attributes:', error);
+      throw error;
+    }
+
+    console.log(`✅ Loaded attributes for student ${studentId}`);
+    return data as StudentAttributesRow;
+  } catch (error) {
+    console.error('Fatal error loading student attributes:', error);
+    throw error;
+  }
+};
+
+/**
+ * Save/update attributes for a student
+ * Uses upsert to create or update
+ */
+export const saveStudentAttributes = async (
+  studentId: string,
+  attributes: {
+    competitiveness: number;
+    independence: number;
+    teamwork: number;
+    performance: number;
+    coachability: number;
+    comments: string;
+  }
+): Promise<void> => {
+  try {
+    console.log(`💾 Saving attributes for student: ${studentId}`);
+
+    const { error } = await supabase
+      .from('student_attributes')
+      .upsert({
+        student_id: studentId,
+        competitiveness: attributes.competitiveness,
+        independence: attributes.independence,
+        teamwork: attributes.teamwork,
+        performance: attributes.performance,
+        coachability: attributes.coachability,
+        comments: attributes.comments,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'student_id' });
+
+    if (error) {
+      console.error('Error saving student attributes:', error);
+      throw error;
+    }
+
+    console.log(`✅ Saved attributes for student ${studentId}`);
+  } catch (error) {
+    console.error('Fatal error saving student attributes:', error);
+    throw error;
+  }
+};
+
+// =============================================================================
 // DEFAULT STATE
 // =============================================================================
 

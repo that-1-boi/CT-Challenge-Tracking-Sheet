@@ -116,6 +116,33 @@ INSERT INTO app_settings (key, value) VALUES
   ('selected_class_id', 'sat-am1')
 ON CONFLICT (key) DO NOTHING;
 
+-- 7. STUDENT ATTRIBUTES: Evaluation data per student
+-- Stores 5 fixed attributes (0-100 scale) and comments for analytics
+CREATE TABLE student_attributes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+
+  -- Fixed attributes (0-100 scale)
+  competitiveness INTEGER DEFAULT 50 CHECK (competitiveness >= 0 AND competitiveness <= 100),
+  independence INTEGER DEFAULT 50 CHECK (independence >= 0 AND independence <= 100),
+  teamwork INTEGER DEFAULT 50 CHECK (teamwork >= 0 AND teamwork <= 100),
+  performance INTEGER DEFAULT 50 CHECK (performance >= 0 AND performance <= 100),
+  coachability INTEGER DEFAULT 50 CHECK (coachability >= 0 AND coachability <= 100),
+
+  -- Comments text field
+  comments TEXT DEFAULT '',
+
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+  -- One attributes record per student
+  UNIQUE(student_id)
+);
+
+-- Index for faster lookups by student
+CREATE INDEX idx_student_attributes_student ON student_attributes(student_id);
+
 -- =============================================================================
 -- VIEWS FOR EASY QUERYING
 -- =============================================================================
