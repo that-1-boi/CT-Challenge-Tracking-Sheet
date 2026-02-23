@@ -468,18 +468,31 @@ const StudentAnalytics: React.FC = () => {
       {/* Students View */}
       {viewMode === 'students' && (
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* Search Column - narrower */}
-          <div className="w-full lg:w-56 xl:w-64 shrink-0 space-y-3">
+          {/* Search Column - collapses when student selected */}
+          <div
+            className={`shrink-0 space-y-3 transition-all duration-300 ${
+              selectedStudent
+                ? 'w-full lg:w-14 group'
+                : 'w-full lg:w-56 xl:w-64'
+            }`}
+            onMouseEnter={() => selectedStudent && setSearchFocused(true)}
+            onMouseLeave={() => selectedStudent && setSearchFocused(false)}
+          >
+            {/* Search bar container - always visible */}
             <div className="relative">
-              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+              <i className={`fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs transition-opacity ${
+                selectedStudent && !searchFocused ? 'opacity-100' : 'opacity-100'
+              }`}></i>
               <input
                 type="text"
-                placeholder="Filter students..."
-                className="w-full bg-[#fff1d1] border border-[#f4c514] p-3 pl-10 font-bold text-gray-800 focus:outline-none text-sm capitalize placeholder:text-gray-400"
+                placeholder={selectedStudent && !searchFocused ? "" : "Filter students..."}
+                className={`w-full bg-[#fff1d1] border border-[#f4c514] p-3 pl-10 font-bold text-gray-800 focus:outline-none text-sm capitalize placeholder:text-gray-400 transition-all duration-300 ${
+                  selectedStudent && !searchFocused ? 'cursor-pointer' : ''
+                }`}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onFocus={() => setSearchFocused(true)}
-                onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+                onBlur={() => !selectedStudent && setTimeout(() => setSearchFocused(false), 200)}
               />
               {/* Mobile dropdown */}
               {search && searchFocused && filteredStudents.length > 0 && (
@@ -501,13 +514,22 @@ const StudentAnalytics: React.FC = () => {
               )}
             </div>
 
-            {/* Desktop list - compact */}
-            <div className="hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[500px] overflow-y-auto shadow-sm">
+            {/* Desktop list - shows on hover when student is selected, always visible otherwise */}
+            <div className={`hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[500px] overflow-y-auto shadow-sm transition-all duration-300 ${
+              selectedStudent
+                ? searchFocused
+                  ? 'opacity-100 visible w-56 xl:w-64 absolute z-50'
+                  : 'opacity-0 invisible h-0 overflow-hidden'
+                : 'opacity-100 visible'
+            }`}>
               {filteredStudents.length > 0 ? (
                 filteredStudents.map(profile => (
                   <button
                     key={profile.studentId}
-                    onClick={() => setSelectedStudent(profile)}
+                    onClick={() => {
+                      setSelectedStudent(profile);
+                      setSearchFocused(false);
+                    }}
                     className={`w-full text-left px-2 py-2 font-black uppercase text-[10px] hover:bg-[#f4c514] transition-colors flex items-center justify-between gap-1 ${selectedStudent?.studentId === profile.studentId ? 'bg-[#f4c514]' : ''
                       }`}
                   >
@@ -523,8 +545,8 @@ const StudentAnalytics: React.FC = () => {
             </div>
           </div>
 
-          {/* Details Column */}
-          <div className="flex-1">
+          {/* Details Column - expands when student selected */}
+          <div className={`transition-all duration-300 ${selectedStudent ? 'flex-1' : 'flex-1'}`}>
             {selectedStudent ? (
               <StudentProfileCard profile={selectedStudent} onClose={() => setSelectedStudent(null)} />
             ) : (
@@ -1463,7 +1485,7 @@ const StudentProfileCard: React.FC<{
       {/* Radar Chart + Performance Line Graph - Side by Side */}
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6">
         {/* Radar Chart Section */}
-        <div className="bg-[#fff1d1] border border-[#ffe5a0] p-5 rounded-sm">
+        <div className="bg-white border border-slate-200 p-5 rounded-sm shadow-sm">
           <h3 className="text-xs font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic mb-4">
             Student Attributes
           </h3>
