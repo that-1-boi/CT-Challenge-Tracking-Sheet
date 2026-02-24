@@ -52,21 +52,28 @@ const LivePublicView: React.FC = () => {
 
   const handleClassChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newClassId = e.target.value;
-
-    // Store user's selection in ref
     userSelectedClassId.current = newClassId;
 
-    // Show loading state
+    // updatePublicSettings updates the settings cache synchronously (before its first await),
+    // so getPublicViewFromCacheSync below will already see the new classId.
+    // We kick off the DB write but don't await it yet.
+    const dbWrite = updatePublicSettings(undefined, newClassId);
+
+    // Fast path: new class data already in cache — show it immediately, no spinner
+    const cachedState = getPublicViewFromCacheSync();
+    if (cachedState) {
+      setState(cachedState);
+      dbWrite.catch(console.error); // ensure DB write completes in background
+      window.dispatchEvent(new Event('storage'));
+      return;
+    }
+
+    // Cache miss — show spinner, wait for DB write, then load from DB
     setLoading(true);
-
     try {
-      // Update public settings in database
-      await updatePublicSettings(undefined, newClassId);
-
-      // Load new class data
+      await dbWrite;
       const loadedState = await loadPublicViewState();
       setState(loadedState);
-
       window.dispatchEvent(new Event('storage'));
     } catch (error) {
       console.error('Error changing class:', error);

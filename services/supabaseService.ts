@@ -1290,9 +1290,18 @@ export const updatePublicSettings = async (
   publicThemeName?: string,
   publicClassId?: string
 ): Promise<void> => {
-  // Clear settings cache so the next loadPublicViewState re-reads from DB
-  // (ensures class/theme changes take effect immediately)
-  clearPublicSettingsCache();
+  // Synchronously merge new values into the settings cache BEFORE any DB write.
+  // Because this runs before the first `await`, callers can read the updated cache
+  // immediately after calling this function (without awaiting it) to get instant
+  // cache hits in loadPublicViewState / getPublicViewFromCacheSync.
+  const existing = getCachedPublicSettings();
+  const mergedTheme = publicThemeName ?? existing?.themeName ?? '';
+  const mergedClass = publicClassId ?? existing?.classId ?? '';
+  if (mergedTheme && mergedClass) {
+    setCachedPublicSettings(mergedTheme, mergedClass);
+  } else {
+    clearPublicSettingsCache();
+  }
 
   const updates = [];
 
