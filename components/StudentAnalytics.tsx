@@ -1077,15 +1077,17 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
     // Calculate position relative to the container
     let x = circleRect.left + circleRect.width / 2 - containerRect.left;
 
-    // Clamp tooltip to stay within container bounds
-    const tooltipWidth = 180;
-    const tooltipHeight = 30;
+    // Use fixed max-width (matches CSS max-width: 200px on tooltip)
+    const tooltipMaxWidth = 200;
+    const tooltipHeight = 40; // Account for potential text wrap
+    const edgePadding = 10;
 
-    // Horizontal bounds
-    if (x - tooltipWidth / 2 < 0) {
-      x = tooltipWidth / 2 + 10;
-    } else if (x + tooltipWidth / 2 > containerRect.width) {
-      x = containerRect.width - tooltipWidth / 2 - 10;
+    // Clamp horizontal position to keep tooltip fully within container
+    const halfWidth = tooltipMaxWidth / 2;
+    if (x - halfWidth < edgePadding) {
+      x = halfWidth + edgePadding;
+    } else if (x + halfWidth > containerRect.width - edgePadding) {
+      x = containerRect.width - halfWidth - edgePadding;
     }
 
     // Vertical bounds - check if tooltip would overflow at bottom
@@ -1278,11 +1280,13 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
         {/* HTML tooltip - positioned within container bounds */}
         {hoveredTheme && (
           <div
-            className="absolute z-50 bg-black text-white text-[16px] font-bold px-1.5 py-1 rounded whitespace-nowrap pointer-events-none"
+            className="absolute z-50 bg-black text-white text-[14px] font-bold px-2 py-1 rounded pointer-events-none text-center"
             style={{
               left: hoveredTheme.x,
               top: hoveredTheme.y,
               transform: hoveredTheme.showAbove ? 'translate(-50%, -100%)' : 'translateX(-50%)',
+              maxWidth: '200px',
+              wordWrap: 'break-word',
             }}
           >
             {hoveredTheme.name}
