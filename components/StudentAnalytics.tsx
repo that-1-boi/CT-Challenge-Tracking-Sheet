@@ -885,15 +885,15 @@ const StudentScatterPlot: React.FC<{
           <div className="flex flex-wrap gap-3 text-[16px]">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-[#22c55e]"></span>
-              <span className="font-bold text-gray-600">High Attr (70+)</span>
+              <span className="font-bold text-gray-600">High Attr (60+)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-[#eab308]"></span>
-              <span className="font-bold text-gray-600">Medium (50-70)</span>
+              <span className="font-bold text-gray-600">Medium (40-60)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-[#ef4444]"></span>
-              <span className="font-bold text-gray-600">Low (&lt;50)</span>
+              <span className="font-bold text-gray-600">Low (&lt;40)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-[#9ca3af] opacity-50" style={{ border: '1px dashed #6b7280' }}></span>
