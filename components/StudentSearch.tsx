@@ -43,42 +43,6 @@ function setCachedSummaries(data: StudentSummary[]): void {
   }
 }
 
-// Cache for individual student history (per-student)
-function getStudentHistoryCache(studentId: string): HistoryEntry[] | null {
-  try {
-    const cacheKey = `ct_student_history_${studentId}`;
-    const timestampKey = `ct_student_history_ts_${studentId}`;
-
-    const cached = localStorage.getItem(cacheKey);
-    const timestamp = localStorage.getItem(timestampKey);
-    if (!cached || !timestamp) return null;
-
-    const cacheTime = parseInt(timestamp, 10);
-    const lastSync = getLastSyncTimestamp();
-
-    // If a sync happened after caching, invalidate
-    if (lastSync && lastSync > cacheTime) {
-      return null;
-    }
-
-    return JSON.parse(cached);
-  } catch {
-    return null;
-  }
-}
-
-function setStudentHistoryCache(studentId: string, data: HistoryEntry[]): void {
-  try {
-    const cacheKey = `ct_student_history_${studentId}`;
-    const timestampKey = `ct_student_history_ts_${studentId}`;
-
-    localStorage.setItem(cacheKey, JSON.stringify(data));
-    localStorage.setItem(timestampKey, Date.now().toString());
-  } catch (error) {
-    console.error('Error caching student history:', error);
-  }
-}
-
 // =============================================================================
 // COMPONENT
 // =============================================================================
@@ -133,29 +97,18 @@ const StudentSearch: React.FC = () => {
       // Also clear selected student if they were viewing
       if (selectedStudentId) {
         setStudentHistory([]);
-        loadStudentData(selectedStudentId, true);
+        loadStudentData(selectedStudentId);
       }
     });
     return unsubscribe;
   }, [loadSummaries, selectedStudentId]);
 
   // Load individual student's history (lazy - on selection)
-  const loadStudentData = useCallback(async (studentId: string, forceRefresh = false) => {
-    // Check cache first
-    if (!forceRefresh) {
-      const cached = getStudentHistoryCache(studentId);
-      if (cached) {
-        console.log('StudentSearch: Using cached student history');
-        setStudentHistory(cached);
-        return;
-      }
-    }
-
+  const loadStudentData = useCallback(async (studentId: string) => {
     setLoadingStudent(true);
     try {
       const history = await loadStudentHistoryById(studentId);
       setStudentHistory(history);
-      setStudentHistoryCache(studentId, history);
     } catch (error) {
       console.error('Error loading student history:', error);
       setStudentHistory([]);
