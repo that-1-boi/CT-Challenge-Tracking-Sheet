@@ -868,23 +868,43 @@ const StudentScatterPlot: React.FC<{
           </p>
         </div>
 
-        {/* Legend - Attribute Quality */}
-        <div className="flex flex-wrap gap-3 text-[16px]">
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-[#22c55e]"></span>
-            <span className="font-bold text-gray-600">High Attr (70+)</span>
+        {/* Legend - Attribute Quality + Point Size */}
+        <div className="flex flex-col gap-2">
+          {/* Color legend */}
+          <div className="flex flex-wrap gap-3 text-[16px]">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-[#22c55e]"></span>
+              <span className="font-bold text-gray-600">High Attr (70+)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-[#eab308]"></span>
+              <span className="font-bold text-gray-600">Medium (50-70)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-[#ef4444]"></span>
+              <span className="font-bold text-gray-600">Low (&lt;50)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-[#9ca3af] opacity-50" style={{ border: '1px dashed #6b7280' }}></span>
+              <span className="font-bold text-gray-600">No Data ({studentPoints.filter(p => !p.hasAttributes).length})</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-[#eab308]"></span>
-            <span className="font-bold text-gray-600">Medium (50-70)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-[#ef4444]"></span>
-            <span className="font-bold text-gray-600">Low (&lt;50)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-[#9ca3af] opacity-50" style={{ border: '1px dashed #6b7280' }}></span>
-            <span className="font-bold text-gray-600">No Data ({studentPoints.filter(p => !p.hasAttributes).length})</span>
+          {/* Point size legend */}
+          <div className="flex items-center gap-2 text-[14px]">
+            <span className="font-bold text-gray-500">Size =</span>
+            <div className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+              <span className="text-gray-400 text-[12px]">Low</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-3.5 h-3.5 rounded-full bg-gray-400"></span>
+              <span className="text-gray-400 text-[12px]">Med</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-5 h-5 rounded-full bg-gray-400"></span>
+              <span className="text-gray-400 text-[12px]">High</span>
+            </div>
+            <span className="font-bold text-gray-500 ml-1">Technical Score</span>
           </div>
         </div>
       </div>
