@@ -727,7 +727,7 @@ const StudentScatterPlot: React.FC<{
   studentAttributesMap: Map<string, StudentAttributesSummary>;
 }> = ({ profiles, studentAttributesMap }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const [hoveredStudent, setHoveredStudent] = useState<{ point: StudentPoint; x: number; y: number } | null>(null);
+  const [hoveredStudent, setHoveredStudent] = useState<{ point: StudentPoint; x: number; y: number; showBelow: boolean } | null>(null);
 
   // Process students into points with tier and attribute information
   const studentPoints: StudentPoint[] = useMemo(() => {
@@ -877,11 +877,10 @@ const StudentScatterPlot: React.FC<{
     const circleRect = event.currentTarget.getBoundingClientRect();
 
     let x = circleRect.left + circleRect.width / 2 - containerRect.left;
-    let y = circleRect.top - containerRect.top - 10;
 
     // Clamp tooltip position to stay within container bounds
-    const tooltipWidth = 180;
-    const tooltipHeight = 180;
+    const tooltipWidth = 220;
+    const tooltipHeight = 280; // Increased for all the new fields
 
     // Horizontal bounds
     if (x - tooltipWidth / 2 < 0) {
@@ -890,12 +889,23 @@ const StudentScatterPlot: React.FC<{
       x = containerRect.width - tooltipWidth / 2 - 10;
     }
 
-    // Vertical bounds - if tooltip would go above container, show below the point
-    if (y - tooltipHeight < 0) {
-      y = circleRect.bottom - containerRect.top + 10;
+    // Vertical bounds - check if tooltip would go above container
+    const circleTop = circleRect.top - containerRect.top;
+    const circleBottom = circleRect.bottom - containerRect.top;
+
+    let y: number;
+    let showBelow = false;
+
+    // If not enough space above, show below the point
+    if (circleTop - tooltipHeight - 15 < 0) {
+      y = circleBottom + 15; // Position below the circle
+      showBelow = true;
+    } else {
+      y = circleTop - 15; // Position above the circle
+      showBelow = false;
     }
 
-    setHoveredStudent({ point, x, y });
+    setHoveredStudent({ point, x, y, showBelow });
   };
 
   // Sort points so larger ones render first (smaller on top)
@@ -1042,7 +1052,7 @@ const StudentScatterPlot: React.FC<{
             style={{
               left: hoveredStudent.x,
               top: hoveredStudent.y,
-              transform: 'translate(-50%, -100%)',
+              transform: hoveredStudent.showBelow ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
               minWidth: '200px',
             }}
           >
