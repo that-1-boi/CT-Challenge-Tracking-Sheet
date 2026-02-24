@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AppState, Theme, Student, ThemeCategory } from '../types';
-import { loadState, saveState, getAllStudentsFromDB, deleteStudent, deleteTheme, updateThemeCategory, clearStateCache } from '../services/storageService';
+import { AppState, Theme, Student, ThemeCategory, ProgressBackupData, AttributesBackupData } from '../types';
+import { loadState, saveState, getAllStudentsFromDB, deleteStudent, deleteTheme, updateThemeCategory, clearStateCache, exportProgressBackup, restoreProgressBackup, exportAttributesBackup, restoreAttributesBackup } from '../services/storageService';
 import { DEFAULT_CLASSES } from '../constants';
 import { dispatchSyncEvent, setLastSyncTimestamp } from '../services/syncEvents';
 
@@ -32,6 +32,16 @@ const Admin: React.FC = () => {
 
   // Track total students in database for verification
   const [totalStudentsInDB, setTotalStudentsInDB] = useState<number>(0);
+
+  // Backup & Restore state
+  const [progressBackupStatus, setProgressBackupStatus] = useState<'idle' | 'working' | 'success' | 'error'>('idle');
+  const [progressBackupMsg, setProgressBackupMsg] = useState('');
+  const [pendingProgressBackup, setPendingProgressBackup] = useState<ProgressBackupData | null>(null);
+  const [attrBackupStatus, setAttrBackupStatus] = useState<'idle' | 'working' | 'success' | 'error'>('idle');
+  const [attrBackupMsg, setAttrBackupMsg] = useState('');
+  const [pendingAttrBackup, setPendingAttrBackup] = useState<AttributesBackupData | null>(null);
+  const progressFileRef = useRef<HTMLInputElement>(null);
+  const attrFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Clear state cache and force a fresh DB load so Admin always has complete data
@@ -439,6 +449,127 @@ const Admin: React.FC = () => {
       };
     });
     setDraggedStudent(null);
+  };
+
+  // ── Backup helpers ────────────────────────────────────────────────────────
+
+  const downloadJson = (data: object, filename: string) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportProgress = async () => {
+    setProgressBackupStatus('working');
+    setProgressBackupMsg('');
+    try {
+      const backup = await exportProgressBackup();
+      const date = new Date().toISOString().slice(0, 10);
+      downloadJson(backup, `ct-progress-${date}.json`);
+      setProgressBackupStatus('success');
+      setProgressBackupMsg(`Exported ${backup.metadata.recordCount} records across ${backup.metadata.themeCount} themes`);
+    } catch {
+      setProgressBackupStatus('error');
+      setProgressBackupMsg('Export failed — check console for details');
+    }
+  };
+
+  const handleProgressFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string);
+        if (parsed.type !== 'progress' || !Array.isArray(parsed.themes)) {
+          setProgressBackupStatus('error');
+          setProgressBackupMsg('Invalid file — expected a progress backup (type: "progress")');
+          return;
+        }
+        setPendingProgressBackup(parsed);
+        setProgressBackupStatus('idle');
+        setProgressBackupMsg('');
+      } catch {
+        setProgressBackupStatus('error');
+        setProgressBackupMsg('Could not parse file — make sure it is a valid JSON backup');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleConfirmRestoreProgress = async () => {
+    if (!pendingProgressBackup) return;
+    setProgressBackupStatus('working');
+    setProgressBackupMsg('');
+    try {
+      const result = await restoreProgressBackup(pendingProgressBackup);
+      setPendingProgressBackup(null);
+      setProgressBackupStatus('success');
+      const skippedNote = result.skipped > 0 ? `, ${result.skipped} skipped` : '';
+      setProgressBackupMsg(`Restored ${result.restored} progress records${skippedNote}`);
+    } catch {
+      setProgressBackupStatus('error');
+      setProgressBackupMsg('Restore failed — check console for details');
+    }
+  };
+
+  const handleExportAttributes = async () => {
+    setAttrBackupStatus('working');
+    setAttrBackupMsg('');
+    try {
+      const backup = await exportAttributesBackup();
+      const date = new Date().toISOString().slice(0, 10);
+      downloadJson(backup, `ct-attributes-${date}.json`);
+      setAttrBackupStatus('success');
+      setAttrBackupMsg(`Exported ${backup.metadata.studentCount} student attribute records`);
+    } catch {
+      setAttrBackupStatus('error');
+      setAttrBackupMsg('Export failed — check console for details');
+    }
+  };
+
+  const handleAttrFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string);
+        if (parsed.type !== 'attributes' || !Array.isArray(parsed.students)) {
+          setAttrBackupStatus('error');
+          setAttrBackupMsg('Invalid file — expected an attributes backup (type: "attributes")');
+          return;
+        }
+        setPendingAttrBackup(parsed);
+        setAttrBackupStatus('idle');
+        setAttrBackupMsg('');
+      } catch {
+        setAttrBackupStatus('error');
+        setAttrBackupMsg('Could not parse file — make sure it is a valid JSON backup');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleConfirmRestoreAttributes = async () => {
+    if (!pendingAttrBackup) return;
+    setAttrBackupStatus('working');
+    setAttrBackupMsg('');
+    try {
+      const result = await restoreAttributesBackup(pendingAttrBackup);
+      setPendingAttrBackup(null);
+      setAttrBackupStatus('success');
+      setAttrBackupMsg(`Restored ${result.restored} attribute records`);
+    } catch {
+      setAttrBackupStatus('error');
+      setAttrBackupMsg('Restore failed — check console for details');
+    }
   };
 
   return (
@@ -924,6 +1055,129 @@ const Admin: React.FC = () => {
                 3. <b className="text-[#f4c514]">Click "Sync to Cloud"</b> when done to save your changes.
               </p>
             </div>
+
+            {/* ── Backup & Restore ── */}
+            <div className="bg-black border-2 border-[#f4c514] rounded-sm shadow-xl p-6 space-y-6">
+              <p className="text-[#f4c514] font-black uppercase text-xs italic tracking-widest">
+                <i className="fas fa-database mr-2"></i>Backup &amp; Restore
+              </p>
+
+              {/* Hidden file inputs */}
+              <input ref={progressFileRef} type="file" accept=".json" className="hidden" onChange={handleProgressFileChange} />
+              <input ref={attrFileRef} type="file" accept=".json" className="hidden" onChange={handleAttrFileChange} />
+
+              {/* Student Progress */}
+              <div className="space-y-3">
+                <p className="text-white text-xs font-bold uppercase tracking-wide">Student Progress</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleExportProgress}
+                    disabled={progressBackupStatus === 'working'}
+                    className="flex-1 bg-[#f4c514] text-black text-xs font-black uppercase py-2 px-3 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {progressBackupStatus === 'working' ? 'Working…' : '↓ Export'}
+                  </button>
+                  <button
+                    onClick={() => progressFileRef.current?.click()}
+                    disabled={progressBackupStatus === 'working'}
+                    className="flex-1 bg-white/10 text-white text-xs font-black uppercase py-2 px-3 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-white/20"
+                  >
+                    ↑ Import
+                  </button>
+                </div>
+
+                {/* Progress confirmation panel */}
+                {pendingProgressBackup && (
+                  <div className="border border-[#f4c514]/50 bg-[#f4c514]/10 p-3 space-y-2">
+                    <p className="text-[#f4c514] text-[10px] font-bold uppercase">Confirm Restore</p>
+                    <p className="text-white text-[10px] leading-relaxed">
+                      Backup from <b>{new Date(pendingProgressBackup.exportedAt).toLocaleDateString()}</b>
+                      {' · '}{pendingProgressBackup.metadata.themeCount} themes
+                      {' · '}{pendingProgressBackup.metadata.recordCount} records
+                    </p>
+                    <p className="text-gray-400 text-[10px]">Overwrites zeroed/outdated progress values. Does not delete any existing data.</p>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={handleConfirmRestoreProgress}
+                        disabled={progressBackupStatus === 'working'}
+                        className="flex-1 bg-[#f4c514] text-black text-[10px] font-black uppercase py-1.5 hover:bg-yellow-400 disabled:opacity-50 transition-colors"
+                      >
+                        {progressBackupStatus === 'working' ? 'Restoring…' : 'Confirm Restore'}
+                      </button>
+                      <button
+                        onClick={() => setPendingProgressBackup(null)}
+                        className="flex-1 bg-white/10 text-white text-[10px] font-black uppercase py-1.5 hover:bg-white/20 transition-colors border border-white/20"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {progressBackupMsg && (
+                  <p className={`text-[10px] font-bold ${progressBackupStatus === 'error' ? 'text-red-400' : 'text-green-400'}`}>
+                    {progressBackupStatus === 'error' ? '✗ ' : '✓ '}{progressBackupMsg}
+                  </p>
+                )}
+              </div>
+
+              <div className="border-t border-white/10" />
+
+              {/* Student Attributes */}
+              <div className="space-y-3">
+                <p className="text-white text-xs font-bold uppercase tracking-wide">Student Attributes</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleExportAttributes}
+                    disabled={attrBackupStatus === 'working'}
+                    className="flex-1 bg-[#f4c514] text-black text-xs font-black uppercase py-2 px-3 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {attrBackupStatus === 'working' ? 'Working…' : '↓ Export'}
+                  </button>
+                  <button
+                    onClick={() => attrFileRef.current?.click()}
+                    disabled={attrBackupStatus === 'working'}
+                    className="flex-1 bg-white/10 text-white text-xs font-black uppercase py-2 px-3 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-white/20"
+                  >
+                    ↑ Import
+                  </button>
+                </div>
+
+                {/* Attributes confirmation panel */}
+                {pendingAttrBackup && (
+                  <div className="border border-[#f4c514]/50 bg-[#f4c514]/10 p-3 space-y-2">
+                    <p className="text-[#f4c514] text-[10px] font-bold uppercase">Confirm Restore</p>
+                    <p className="text-white text-[10px] leading-relaxed">
+                      Backup from <b>{new Date(pendingAttrBackup.exportedAt).toLocaleDateString()}</b>
+                      {' · '}{pendingAttrBackup.metadata.studentCount} students
+                    </p>
+                    <p className="text-gray-400 text-[10px]">Overwrites existing attribute scores for matched students.</p>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={handleConfirmRestoreAttributes}
+                        disabled={attrBackupStatus === 'working'}
+                        className="flex-1 bg-[#f4c514] text-black text-[10px] font-black uppercase py-1.5 hover:bg-yellow-400 disabled:opacity-50 transition-colors"
+                      >
+                        {attrBackupStatus === 'working' ? 'Restoring…' : 'Confirm Restore'}
+                      </button>
+                      <button
+                        onClick={() => setPendingAttrBackup(null)}
+                        className="flex-1 bg-white/10 text-white text-[10px] font-black uppercase py-1.5 hover:bg-white/20 transition-colors border border-white/20"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {attrBackupMsg && (
+                  <p className={`text-[10px] font-bold ${attrBackupStatus === 'error' ? 'text-red-400' : 'text-green-400'}`}>
+                    {attrBackupStatus === 'error' ? '✗ ' : '✓ '}{attrBackupMsg}
+                  </p>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       </div>

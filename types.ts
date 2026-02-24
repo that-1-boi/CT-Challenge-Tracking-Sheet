@@ -47,6 +47,52 @@ export interface HistoryEntry {
   themeCreatedAt?: string; // Theme creation date for sorting by theme order
 }
 
+// =============================================================================
+// BACKUP / RESTORE TYPES
+// =============================================================================
+
+export interface ProgressBackupTheme {
+  name: string;
+  category: string | null;
+  challenges: { c1: string; c2: string; c3: string; c4: string; c5: string };
+  students: Array<{
+    studentId: string;
+    studentName: string;
+    classSessionId: string;
+    c1: 0 | 1;
+    c2: 0 | 1;
+    c3: 0 | 1;
+    c4: 0 | 1;
+    c5: 0 | 1;
+    lastUpdated: string;
+  }>;
+}
+
+export interface ProgressBackupData {
+  version: string;
+  type: 'progress';
+  exportedAt: string;
+  metadata: { themeCount: number; studentCount: number; recordCount: number };
+  themes: ProgressBackupTheme[];
+}
+
+export interface AttributesBackupData {
+  version: string;
+  type: 'attributes';
+  exportedAt: string;
+  metadata: { studentCount: number };
+  students: Array<{
+    studentId: string;
+    studentName: string;
+    competitiveness: number;
+    independence: number;
+    teamwork: number;
+    performance: number;
+    coachability: number;
+    comments: string;
+  }>;
+}
+
 // Student attributes for analytics radar chart (database-backed)
 export interface StudentAttributes {
   id?: string;

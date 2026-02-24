@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { AppState, Theme, ClassSession, Student, StudentProgress, HistoryEntry, ThemeCategory } from '../types';
+import { AppState, Theme, ClassSession, Student, StudentProgress, HistoryEntry, ThemeCategory, ProgressBackupData, ProgressBackupTheme, AttributesBackupData } from '../types';
 import { DEFAULT_CLASSES } from '../constants';
 
 // =============================================================================
@@ -512,6 +512,16 @@ export const saveState = async (state: AppState): Promise<void> => {
     const { data: existingThemes } = await supabase
       .from('themes')
       .select('id, name');
+
+    // Guard: abort if state has fewer themes than the DB.
+    // A partial-state save would delete assignments/progress for the missing themes.
+    const dbThemeCount = (existingThemes || []).length;
+    if (dbThemeCount > 0 && state.themes.length < dbThemeCount) {
+      console.warn(
+        `💾 saveState aborted: state has ${state.themes.length} theme(s) but DB has ${dbThemeCount} — partial state detected, aborting to protect data`
+      );
+      return;
+    }
 
     const themeIdMap = new Map<string, string>();
     (existingThemes || []).forEach((t: any) => themeIdMap.set(t.name, t.id));
@@ -1714,6 +1724,205 @@ export const loadAllStudentAttributes = async (): Promise<Map<string, StudentAtt
     console.error('Fatal error batch loading student attributes:', error);
     throw error;
   }
+};
+
+// =============================================================================
+// BACKUP & RESTORE
+// =============================================================================
+
+export const exportProgressBackup = async (): Promise<ProgressBackupData> => {
+  console.log('📦 Exporting progress backup...');
+
+  const [{ data: themeRows }, { data: progressRows }] = await Promise.all([
+    supabase.from('themes').select('id, name, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5, category'),
+    supabase.from('student_progress').select('student_id, theme_id, class_session_id, challenge_1_completed, challenge_2_completed, challenge_3_completed, challenge_4_completed, challenge_5_completed, last_updated, students(name), themes(name)'),
+  ]);
+
+  // Build theme id→row map
+  const themeMap = new Map<string, any>();
+  for (const t of themeRows || []) themeMap.set(t.id, t);
+
+  // Group progress by theme id
+  const byTheme = new Map<string, any[]>();
+  for (const p of progressRows || []) {
+    const existing = byTheme.get(p.theme_id) || [];
+    existing.push(p);
+    byTheme.set(p.theme_id, existing);
+  }
+
+  const themes: ProgressBackupTheme[] = [];
+  const studentIdsSeen = new Set<string>();
+
+  for (const [themeId, students] of byTheme) {
+    const t = themeMap.get(themeId);
+    if (!t) continue;
+
+    themes.push({
+      name: t.name,
+      category: t.category ?? null,
+      challenges: {
+        c1: t.challenge_1,
+        c2: t.challenge_2,
+        c3: t.challenge_3,
+        c4: t.challenge_4,
+        c5: t.challenge_5,
+      },
+      students: students.map((p: any) => {
+        studentIdsSeen.add(p.student_id);
+        return {
+          studentId: p.student_id,
+          studentName: (p.students as any)?.name ?? '',
+          classSessionId: p.class_session_id,
+          c1: p.challenge_1_completed ? 1 : 0,
+          c2: p.challenge_2_completed ? 1 : 0,
+          c3: p.challenge_3_completed ? 1 : 0,
+          c4: p.challenge_4_completed ? 1 : 0,
+          c5: p.challenge_5_completed ? 1 : 0,
+          lastUpdated: p.last_updated,
+        };
+      }),
+    });
+  }
+
+  const totalRecords = (progressRows || []).length;
+  console.log(`✅ Progress backup built: ${themes.length} themes, ${totalRecords} records`);
+
+  return {
+    version: '1.0',
+    type: 'progress',
+    exportedAt: new Date().toISOString(),
+    metadata: {
+      themeCount: themes.length,
+      studentCount: studentIdsSeen.size,
+      recordCount: totalRecords,
+    },
+    themes,
+  };
+};
+
+export const restoreProgressBackup = async (
+  backup: ProgressBackupData
+): Promise<{ restored: number; skipped: number; errors: string[] }> => {
+  if (backup.type !== 'progress' || !Array.isArray(backup.themes)) {
+    throw new Error('Invalid progress backup file');
+  }
+
+  console.log('♻️  Restoring progress backup...');
+  const errors: string[] = [];
+  let skipped = 0;
+
+  // Re-fetch current theme name → id map
+  const { data: dbThemes } = await supabase.from('themes').select('id, name');
+  const themeIdMap = new Map<string, string>((dbThemes || []).map((t: any) => [t.name, t.id]));
+
+  const progressRows: any[] = [];
+
+  for (const theme of backup.themes) {
+    const themeId = themeIdMap.get(theme.name);
+    if (!themeId) {
+      console.warn(`  ⚠ Theme not found in DB, skipping: "${theme.name}"`);
+      errors.push(`Theme not found, skipped: "${theme.name}"`);
+      skipped += theme.students.length;
+      continue;
+    }
+
+    for (const s of theme.students) {
+      progressRows.push({
+        student_id: s.studentId,
+        theme_id: themeId,
+        class_session_id: s.classSessionId,
+        challenge_1_completed: s.c1 === 1,
+        challenge_2_completed: s.c2 === 1,
+        challenge_3_completed: s.c3 === 1,
+        challenge_4_completed: s.c4 === 1,
+        challenge_5_completed: s.c5 === 1,
+        last_updated: s.lastUpdated,
+      });
+    }
+  }
+
+  if (progressRows.length > 0) {
+    const { error } = await supabase
+      .from('student_progress')
+      .upsert(progressRows, { onConflict: 'student_id,theme_id' });
+
+    if (error) {
+      console.error('  ✗ Error restoring progress:', error);
+      throw error;
+    }
+  }
+
+  clearStateCache();
+  console.log(`✅ Restored ${progressRows.length} progress records (${skipped} skipped)`);
+  return { restored: progressRows.length, skipped, errors };
+};
+
+export const exportAttributesBackup = async (): Promise<AttributesBackupData> => {
+  console.log('📦 Exporting attributes backup...');
+
+  const { data, error } = await supabase
+    .from('student_attributes')
+    .select('student_id, competitiveness, independence, teamwork, performance, coachability, comments, students(name)');
+
+  if (error) {
+    console.error('Error exporting attributes:', error);
+    throw error;
+  }
+
+  const students = (data || []).map((row: any) => ({
+    studentId: row.student_id,
+    studentName: (row.students as any)?.name ?? '',
+    competitiveness: row.competitiveness,
+    independence: row.independence,
+    teamwork: row.teamwork,
+    performance: row.performance,
+    coachability: row.coachability,
+    comments: row.comments ?? '',
+  }));
+
+  console.log(`✅ Attributes backup built: ${students.length} students`);
+
+  return {
+    version: '1.0',
+    type: 'attributes',
+    exportedAt: new Date().toISOString(),
+    metadata: { studentCount: students.length },
+    students,
+  };
+};
+
+export const restoreAttributesBackup = async (
+  backup: AttributesBackupData
+): Promise<{ restored: number; errors: string[] }> => {
+  if (backup.type !== 'attributes' || !Array.isArray(backup.students)) {
+    throw new Error('Invalid attributes backup file');
+  }
+
+  console.log('♻️  Restoring attributes backup...');
+
+  const rows = backup.students.map(s => ({
+    student_id: s.studentId,
+    competitiveness: s.competitiveness,
+    independence: s.independence,
+    teamwork: s.teamwork,
+    performance: s.performance,
+    coachability: s.coachability,
+    comments: s.comments,
+  }));
+
+  if (rows.length > 0) {
+    const { error } = await supabase
+      .from('student_attributes')
+      .upsert(rows, { onConflict: 'student_id' });
+
+    if (error) {
+      console.error('  ✗ Error restoring attributes:', error);
+      throw error;
+    }
+  }
+
+  console.log(`✅ Restored ${rows.length} attribute records`);
+  return { restored: rows.length, errors: [] };
 };
 
 // =============================================================================
