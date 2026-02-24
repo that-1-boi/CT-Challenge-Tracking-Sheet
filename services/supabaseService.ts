@@ -1210,33 +1210,49 @@ export const loadStudentHistoryById = async (studentId: string): Promise<History
   try {
     console.log(`📖 Loading history for student: ${studentId}`);
 
-    const { data: progressData, error } = await supabase
-      .from('v_student_roster')
-      .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated, assigned_at')
-      .eq('student_id', studentId)
-      .order('last_updated', { ascending: false });
+    // Query student_progress directly — this table retains ALL historical records.
+    // v_student_roster requires student_assignments which is current-only: old theme
+    // assignments are deleted when the roster rotates, making historical themes invisible.
+    const [progressResult, studentResult] = await Promise.all([
+      supabase
+        .from('student_progress')
+        .select('student_id, theme_id, class_session_id, challenge_1_completed, challenge_2_completed, challenge_3_completed, challenge_4_completed, challenge_5_completed, last_updated')
+        .eq('student_id', studentId)
+        .order('last_updated', { ascending: false }),
+      supabase
+        .from('students')
+        .select('name')
+        .eq('id', studentId)
+        .single(),
+    ]);
 
-    if (error) {
-      console.error('Error loading student history:', error);
+    if (progressResult.error) {
+      console.error('Error loading student history:', progressResult.error);
       return [];
     }
 
+    const progressData = progressResult.data;
     if (!progressData || progressData.length === 0) {
       return [];
     }
 
-    // Load theme data for challenge names
-    const themeIds = [...new Set<string>((progressData as RosterViewRow[]).map(r => r.theme_id))];
+    const studentName = studentResult.data?.name ?? 'Unknown';
+
+    // Use DEFAULT_CLASSES constants for class name lookup — no extra DB query needed
+    const classMap = new Map(DEFAULT_CLASSES.map(c => [c.id, c.name]));
+
+    // Load theme data (name + challenge names) for all themes in this student's history
+    const themeIds = [...new Set<string>(progressData.map(r => r.theme_id))];
     const { data: allThemes } = await supabase
       .from('themes')
-      .select('id, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5, created_at')
+      .select('id, name, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5, created_at')
       .in('id', themeIds);
 
     const themeMap = new Map(allThemes?.map(t => [t.id, t]) || []);
 
     const history: HistoryEntry[] = [];
 
-    for (const row of progressData as RosterViewRow[]) {
+    for (const row of progressData) {
       if (!row.last_updated) continue;
 
       const themeData = themeMap.get(row.theme_id);
@@ -1251,20 +1267,20 @@ export const loadStudentHistoryById = async (studentId: string): Promise<History
       ];
 
       const completedChallenges: string[] = [];
-      if (row.c1) completedChallenges.push(allChallenges[0]);
-      if (row.c2) completedChallenges.push(allChallenges[1]);
-      if (row.c3) completedChallenges.push(allChallenges[2]);
-      if (row.c4) completedChallenges.push(allChallenges[3]);
-      if (row.c5) completedChallenges.push(allChallenges[4]);
+      if (row.challenge_1_completed) completedChallenges.push(allChallenges[0]);
+      if (row.challenge_2_completed) completedChallenges.push(allChallenges[1]);
+      if (row.challenge_3_completed) completedChallenges.push(allChallenges[2]);
+      if (row.challenge_4_completed) completedChallenges.push(allChallenges[3]);
+      if (row.challenge_5_completed) completedChallenges.push(allChallenges[4]);
 
       const date = new Date(row.last_updated);
 
       history.push({
         id: `${row.student_id}_${row.theme_id}_${date.toISOString()}`,
-        studentName: row.student_name,
-        className: row.class_session_name,
+        studentName,
+        className: classMap.get(row.class_session_id) ?? row.class_session_id,
         weekName: `Session ${date.toLocaleDateString()}`,
-        weekTheme: row.theme_name,
+        weekTheme: themeData.name,
         challenges: completedChallenges,
         allAvailableChallenges: allChallenges,
         date: row.last_updated,
