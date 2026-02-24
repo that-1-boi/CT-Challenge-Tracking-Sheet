@@ -392,11 +392,22 @@ const StudentAnalytics: React.FC = () => {
           <h1 className="text-3xl md:text-4xl font-black text-[#333] tracking-tighter italic uppercase">Performance Analytics</h1>
           <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">Difficulty-adjusted scoring system</p>
         </div>
-        <div className="text-right">
-          <span className="text-[9px] font-black uppercase text-black/20 tracking-tighter">Generated:</span>
-          <span className="ml-2 text-[10px] font-bold text-gray-500">
-            {new Date(analytics.generatedAt).toLocaleString()}
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <span className="text-[9px] font-black uppercase text-black/20 tracking-tighter">Generated:</span>
+            <span className="ml-2 text-[10px] font-bold text-gray-500">
+              {new Date(analytics.generatedAt).toLocaleString()}
+            </span>
+          </div>
+          <button
+            onClick={() => loadAnalytics(true)}
+            disabled={loading}
+            className="px-3 py-2 bg-[#fff1d1] border border-[#f4c514] text-[10px] font-black uppercase tracking-wider text-gray-600 hover:bg-[#f4c514] hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Refresh data from database"
+          >
+            <i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`}></i>
+            <span className="ml-2 hidden sm:inline">Refresh</span>
+          </button>
         </div>
       </div>
 
