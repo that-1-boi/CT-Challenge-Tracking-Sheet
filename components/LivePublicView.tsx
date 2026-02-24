@@ -1,27 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AppState, HistoryEntry, StudentProgress } from '../types';
-import { loadHistory, loadPublicViewState, updatePublicSettings } from '../services/storageService';
+import { AppState, StudentProgress } from '../types';
+import { getPublicSettings, loadPublicViewStateByClass, updatePublicSettings } from '../services/storageService';
 import { DEFAULT_CLASSES } from '../constants';
 
 const LivePublicView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Track user's manual class selection separately
-  const userSelectedClassId = useRef<string | null>(null);
+  // The active theme name — fetched once from DB on mount and stays fixed
+  const publicThemeNameRef = useRef<string>('');
+
+  // In-memory session cache: classId → AppState
+  // Avoids re-querying even the cache layer when toggling between already-loaded classes
+  const sessionCache = useRef<Map<string, AppState>>(new Map());
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Use optimized load function that only loads public view data
-        const [loadedState, loadedHistory] = await Promise.all([
-          loadPublicViewState(),
-          loadHistory()
-        ]);
-        console.log('LivePublicView: Loaded', loadedHistory.length, 'history entries');
+        // Fetch public settings (lightweight 2-row query) to know which theme/class to show
+        const { publicThemeName, publicClassId } = await getPublicSettings();
+        publicThemeNameRef.current = publicThemeName;
+
+        // Load data for the current class — serves from 48hr cache if available and unchanged
+        const loadedState = await loadPublicViewStateByClass(publicThemeName, publicClassId);
+        sessionCache.current.set(publicClassId, loadedState);
         setState(loadedState);
-        setHistory(loadedHistory);
         setLoading(false);
       } catch (error) {
         console.error('Error loading data:', error);
@@ -31,30 +34,20 @@ const LivePublicView: React.FC = () => {
 
     loadData();
 
-    // Refresh once per day (24 hours) to minimize egress
-    // Data is updated daily, so frequent polling is unnecessary
-    const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+    // Refresh once per day so the displayed theme/class stays in sync with admin changes
+    const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
     const interval = setInterval(async () => {
       try {
         console.log('LivePublicView: Daily refresh triggered');
-        // Use optimized load function for refresh
-        const [loadedState, loadedHistory] = await Promise.all([
-          loadPublicViewState(),
-          loadHistory()
-        ]);
+        const { publicThemeName, publicClassId } = await getPublicSettings();
+        publicThemeNameRef.current = publicThemeName;
 
-        // If user has manually selected a class, preserve it
-        if (userSelectedClassId.current) {
-          setState({
-            ...loadedState,
-            publicClassId: userSelectedClassId.current
-          });
-        } else {
-          setState(loadedState);
-        }
-
-        setHistory(loadedHistory);
+        // Force a fresh DB-change check by clearing that class from session cache
+        sessionCache.current.delete(publicClassId);
+        const loadedState = await loadPublicViewStateByClass(publicThemeName, publicClassId);
+        sessionCache.current.set(publicClassId, loadedState);
+        setState(loadedState);
       } catch (error) {
         console.error('Error refreshing state:', error);
       }
@@ -67,19 +60,28 @@ const LivePublicView: React.FC = () => {
 
   const handleClassChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newClassId = e.target.value;
+    const themeName = publicThemeNameRef.current;
 
-    // Store user's selection in ref
-    userSelectedClassId.current = newClassId;
+    // 1. Check in-memory session cache first (instant, no I/O)
+    const cached = sessionCache.current.get(newClassId);
+    if (cached) {
+      console.log(`LivePublicView: Session cache hit for ${newClassId}`);
+      setState(cached);
+      // Still update the DB setting so other screens follow the selection
+      updatePublicSettings(undefined, newClassId).catch(err =>
+        console.error('Error updating public class setting:', err)
+      );
+      return;
+    }
 
-    // Show loading state
     setLoading(true);
-
     try {
-      // Update public settings in database
+      // Update DB setting so other public screens follow this selection
       await updatePublicSettings(undefined, newClassId);
 
-      // Load new class data
-      const loadedState = await loadPublicViewState();
+      // Load from 48hr cache or DB (DB-change detection included)
+      const loadedState = await loadPublicViewStateByClass(themeName, newClassId);
+      sessionCache.current.set(newClassId, loadedState);
       setState(loadedState);
 
       window.dispatchEvent(new Event('storage'));
@@ -217,7 +219,6 @@ const LivePublicView: React.FC = () => {
             </thead>
             <tbody>
               {currentClass.students.map((student) => {
-                // Get progress from history instead of state.progress
                 const progress = getStudentProgress(student.name, currentClass.name, state.publicThemeName);
                 const completedCount = progress.challenges.length;
                 const percent = (completedCount / 5) * 100;

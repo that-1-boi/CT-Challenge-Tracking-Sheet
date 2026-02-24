@@ -143,6 +143,186 @@ export function clearStateCache(): void {
 }
 
 // =============================================================================
+// PUBLIC VIEW CACHE (48 hours, per theme+class, with DB change detection)
+// Separate from the main state cache — only used by LivePublicView
+// =============================================================================
+
+const PUBLIC_VIEW_CACHE_DURATION_MS = 48 * 60 * 60 * 1000; // 48 hours
+
+interface PublicViewCacheEntry {
+  data: AppState;
+  timestamp: number;
+  themeId: string;
+  dbLastUpdated: string | null;
+}
+
+function getPublicViewCacheKey(themeName: string, classId: string): string {
+  return `ct_pv_${themeName.replace(/\s+/g, '_')}_${classId}`;
+}
+
+function getCachedPublicView(themeName: string, classId: string): PublicViewCacheEntry | null {
+  try {
+    const key = getPublicViewCacheKey(themeName, classId);
+    const cached = localStorage.getItem(key);
+    if (!cached) return null;
+    const entry: PublicViewCacheEntry = JSON.parse(cached);
+    const age = Date.now() - entry.timestamp;
+    if (age < PUBLIC_VIEW_CACHE_DURATION_MS) {
+      return entry;
+    }
+    console.log(`📦 Public view cache expired for ${themeName}/${classId}`);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedPublicView(
+  themeName: string,
+  classId: string,
+  data: AppState,
+  themeId: string,
+  dbLastUpdated: string | null
+): void {
+  try {
+    const key = getPublicViewCacheKey(themeName, classId);
+    const entry: PublicViewCacheEntry = { data, timestamp: Date.now(), themeId, dbLastUpdated };
+    localStorage.setItem(key, JSON.stringify(entry));
+    console.log(`📦 Public view cached (48h): ${themeName}/${classId}`);
+  } catch (error) {
+    console.error('Error caching public view:', error);
+  }
+}
+
+async function getPublicViewDbLastUpdated(themeId: string, classId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('student_progress')
+    .select('last_updated')
+    .eq('theme_id', themeId)
+    .eq('class_session_id', classId)
+    .order('last_updated', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.last_updated || null;
+}
+
+// Load public view data for a specific theme+class from DB, then cache result
+async function loadPublicViewStateByClassFromDB(themeName: string, classId: string): Promise<AppState> {
+  const startTime = Date.now();
+  console.log(`📊 Loading public view from DB: ${themeName}/${classId}`);
+
+  const { data: rosterData, error } = await supabase
+    .from('v_student_roster')
+    .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated, assigned_at')
+    .eq('theme_name', themeName)
+    .eq('class_session_id', classId);
+
+  if (error) {
+    console.error('Error loading public roster:', error);
+    return getDefaultAppState();
+  }
+
+  // Load theme details
+  const { data: themeData } = await supabase
+    .from('themes')
+    .select('id, name, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5')
+    .eq('name', themeName)
+    .single();
+
+  if (!themeData) {
+    console.error('Theme not found:', themeName);
+    return getDefaultAppState();
+  }
+
+  const studentMap = new Map<string, Student>();
+  (rosterData as RosterViewRow[] || []).forEach(row => {
+    if (!studentMap.has(row.student_id)) {
+      studentMap.set(row.student_id, { id: row.student_id, name: row.student_name });
+    }
+  });
+
+  const theme: Theme = {
+    name: themeData.name,
+    challenges: [
+      themeData.challenge_1,
+      themeData.challenge_2,
+      themeData.challenge_3,
+      themeData.challenge_4,
+      themeData.challenge_5
+    ],
+    classes: [{
+      id: classId,
+      name: DEFAULT_CLASSES.find(c => c.id === classId)?.name || classId,
+      students: Array.from(studentMap.values()).sort((a, b) => a.name.localeCompare(b.name))
+    }]
+  };
+
+  const progress: Record<string, StudentProgress> = {};
+  let maxLastUpdated: string | null = null;
+
+  (rosterData as RosterViewRow[] || []).forEach(row => {
+    const key = `${classId}_${row.student_id}_${themeName}`;
+    const challengesCompleted: string[] = [];
+    if (row.c1) challengesCompleted.push('c1');
+    if (row.c2) challengesCompleted.push('c2');
+    if (row.c3) challengesCompleted.push('c3');
+    if (row.c4) challengesCompleted.push('c4');
+    if (row.c5) challengesCompleted.push('c5');
+
+    progress[key] = {
+      studentId: row.student_id,
+      studentName: row.student_name,
+      challengesCompleted,
+      timestamp: row.last_updated ? new Date(row.last_updated).getTime() : 0
+    };
+
+    if (row.last_updated && (!maxLastUpdated || row.last_updated > maxLastUpdated)) {
+      maxLastUpdated = row.last_updated;
+    }
+  });
+
+  const result: AppState = {
+    themes: [theme],
+    currentWeekTheme: themeName,
+    publicThemeName: themeName,
+    publicClassId: classId,
+    selectedClassId: classId,
+    progress
+  };
+
+  console.log(`✅ Public view loaded from DB in ${Date.now() - startTime}ms`);
+
+  setCachedPublicView(themeName, classId, result, themeData.id, maxLastUpdated);
+
+  return result;
+}
+
+// Exported: load public view state for a specific theme+class with 48hr cache
+// and DB-change detection. Used exclusively by LivePublicView.
+export const loadPublicViewStateByClass = async (
+  themeName: string,
+  classId: string
+): Promise<AppState> => {
+  const cached = getCachedPublicView(themeName, classId);
+
+  if (cached) {
+    try {
+      const currentDbTimestamp = await getPublicViewDbLastUpdated(cached.themeId, classId);
+      if (currentDbTimestamp === cached.dbLastUpdated) {
+        console.log(`📦 Serving public view from cache: ${themeName}/${classId}`);
+        return cached.data;
+      }
+      console.log(`📦 DB updated since last cache, refreshing: ${themeName}/${classId}`);
+    } catch {
+      console.warn('📦 DB change check failed, using cached data');
+      return cached.data;
+    }
+  }
+
+  return loadPublicViewStateByClassFromDB(themeName, classId);
+};
+
+// =============================================================================
 // LOAD STATE FROM DATABASE
 // =============================================================================
 
