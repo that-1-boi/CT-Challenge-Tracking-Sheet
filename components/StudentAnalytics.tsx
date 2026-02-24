@@ -645,7 +645,7 @@ const StatCard: React.FC<{
 // READINESS TIER LOGIC
 // ============================================================================
 
-type ReadinessTier = 'competition-ready' | 'near-ready' | 'specialist' | 'not-ready';
+type ReadinessTier = 'competition-ready' | 'near-ready' | 'not-ready';
 
 interface StudentPoint {
   profile: StudentProfile;
@@ -707,13 +707,6 @@ function getReadinessTier(
     return { tier: 'near-ready', label: 'Near Ready', color: '#eab308' };
   }
 
-  // Specialist: mech >= 70 XOR prog >= 70 (strong in one domain)
-  const mechSpecialist = mech >= 70;
-  const progSpecialist = prog >= 70;
-  if ((mechSpecialist && !progSpecialist) || (!mechSpecialist && progSpecialist)) {
-    return { tier: 'specialist', label: 'Specialist', color: '#3b82f6' };
-  }
-
   // Not Ready: otherwise
   return { tier: 'not-ready', label: 'Not Ready', color: '#ef4444' };
 }
@@ -771,7 +764,7 @@ const StudentScatterPlot: React.FC<{
 
   // Tier counts for legend
   const tierCounts = useMemo(() => {
-    const counts = { 'competition-ready': 0, 'near-ready': 0, 'specialist': 0, 'not-ready': 0 };
+    const counts = { 'competition-ready': 0, 'near-ready': 0, 'not-ready': 0 };
     studentPoints.forEach(sp => counts[sp.tier]++);
     return counts;
   }, [studentPoints]);
@@ -1021,7 +1014,7 @@ const StudentScatterPlot: React.FC<{
       </div>
 
       {/* Quick stats below chart */}
-      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+      <div className="mt-4 grid grid-cols-3 gap-3 text-center">
         <div className="bg-green-50 border border-green-200 p-2 rounded">
           <div className="text-lg font-black text-green-600">{tierCounts['competition-ready']}</div>
           <div className="text-[8px] uppercase font-bold text-green-700">Competition Ready</div>
@@ -1029,10 +1022,6 @@ const StudentScatterPlot: React.FC<{
         <div className="bg-yellow-50 border border-yellow-200 p-2 rounded">
           <div className="text-lg font-black text-yellow-600">{tierCounts['near-ready']}</div>
           <div className="text-[8px] uppercase font-bold text-yellow-700">Near Ready</div>
-        </div>
-        <div className="bg-blue-50 border border-blue-200 p-2 rounded">
-          <div className="text-lg font-black text-blue-600">{tierCounts['specialist']}</div>
-          <div className="text-[8px] uppercase font-bold text-blue-700">Specialists</div>
         </div>
         <div className="bg-red-50 border border-red-200 p-2 rounded">
           <div className="text-lg font-black text-red-600">{tierCounts['not-ready']}</div>
