@@ -1213,12 +1213,12 @@ export const loadStudentHistoryById = async (studentId: string): Promise<History
     // Query student_progress directly — this table retains ALL historical records.
     // v_student_roster requires student_assignments which is current-only: old theme
     // assignments are deleted when the roster rotates, making historical themes invisible.
+    // No ORDER BY on nullable column — sort client-side to avoid PostgREST null errors.
     const [progressResult, studentResult] = await Promise.all([
       supabase
         .from('student_progress')
         .select('student_id, theme_id, class_session_id, challenge_1_completed, challenge_2_completed, challenge_3_completed, challenge_4_completed, challenge_5_completed, last_updated')
-        .eq('student_id', studentId)
-        .order('last_updated', { ascending: false }),
+        .eq('student_id', studentId),
       supabase
         .from('students')
         .select('name')
@@ -1227,15 +1227,17 @@ export const loadStudentHistoryById = async (studentId: string): Promise<History
     ]);
 
     if (progressResult.error) {
-      console.error('Error loading student history:', progressResult.error);
+      console.error('Error loading student history (student_progress query):', progressResult.error);
       return [];
     }
 
     const progressData = progressResult.data;
     if (!progressData || progressData.length === 0) {
+      console.log(`No student_progress records found for student: ${studentId}`);
       return [];
     }
 
+    console.log(`Found ${progressData.length} progress records for student ${studentId}`);
     const studentName = studentResult.data?.name ?? 'Unknown';
 
     // Use DEFAULT_CLASSES constants for class name lookup — no extra DB query needed
@@ -1243,20 +1245,30 @@ export const loadStudentHistoryById = async (studentId: string): Promise<History
 
     // Load theme data (name + challenge names) for all themes in this student's history
     const themeIds = [...new Set<string>(progressData.map(r => r.theme_id))];
-    const { data: allThemes } = await supabase
+    const { data: allThemes, error: themesError } = await supabase
       .from('themes')
       .select('id, name, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5, created_at')
       .in('id', themeIds);
+
+    if (themesError) {
+      console.error('Error loading themes for student history:', themesError);
+    }
+    console.log(`Loaded ${allThemes?.length ?? 0} themes for ${themeIds.length} theme IDs`);
 
     const themeMap = new Map(allThemes?.map(t => [t.id, t]) || []);
 
     const history: HistoryEntry[] = [];
 
     for (const row of progressData) {
-      if (!row.last_updated) continue;
-
       const themeData = themeMap.get(row.theme_id);
-      if (!themeData) continue;
+      if (!themeData) {
+        console.warn(`Theme not found for theme_id: ${row.theme_id}`);
+        continue;
+      }
+
+      // Use last_updated if available; fall back to theme creation date
+      const dateStr = row.last_updated ?? themeData.created_at ?? new Date().toISOString();
+      const date = new Date(dateStr);
 
       const allChallenges = [
         themeData.challenge_1,
@@ -1273,8 +1285,6 @@ export const loadStudentHistoryById = async (studentId: string): Promise<History
       if (row.challenge_4_completed) completedChallenges.push(allChallenges[3]);
       if (row.challenge_5_completed) completedChallenges.push(allChallenges[4]);
 
-      const date = new Date(row.last_updated);
-
       history.push({
         id: `${row.student_id}_${row.theme_id}_${date.toISOString()}`,
         studentName,
@@ -1283,10 +1293,13 @@ export const loadStudentHistoryById = async (studentId: string): Promise<History
         weekTheme: themeData.name,
         challenges: completedChallenges,
         allAvailableChallenges: allChallenges,
-        date: row.last_updated,
+        date: dateStr,
         themeCreatedAt: themeData.created_at || undefined,
       });
     }
+
+    // Sort newest first client-side (avoids PostgREST ordering issues with nullable columns)
+    history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     console.log(`✅ Loaded ${history.length} history entries for student`);
     return history;
