@@ -769,56 +769,6 @@ const StudentScatterPlot: React.FC<{
     };
   }, [studentPoints]);
 
-  // Calculate competition pool (top 15-20% by curved average)
-  const competitionPool = useMemo(() => {
-    if (profiles.length < 5) return [];
-    const sorted = [...profiles].sort((a, b) => b.overallScore - a.overallScore);
-    const topCount = Math.max(3, Math.ceil(profiles.length * 0.20)); // ~18% = between 15-20%
-    return sorted.slice(0, topCount);
-  }, [profiles]);
-
-  // Calculate convex hull for competition pool (using new axes)
-  const convexHullPoints = useMemo(() => {
-    if (competitionPool.length < 3) return [];
-
-    // Get points for convex hull calculation using new axes
-    // Need to find matching studentPoints to get compositeScore
-    const points = competitionPool.map(p => {
-      const sp = studentPoints.find(sp => sp.profile.studentId === p.studentId);
-      return {
-        x: p.overallScore,
-        y: sp?.compositeScore ?? p.overallScore,
-      };
-    });
-
-    // Gift wrapping algorithm for convex hull
-    const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) =>
-      (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-
-    const sortedPoints = [...points].sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
-
-    const lower: { x: number; y: number }[] = [];
-    for (const p of sortedPoints) {
-      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
-        lower.pop();
-      }
-      lower.push(p);
-    }
-
-    const upper: { x: number; y: number }[] = [];
-    for (let i = sortedPoints.length - 1; i >= 0; i--) {
-      const p = sortedPoints[i];
-      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
-        upper.pop();
-      }
-      upper.push(p);
-    }
-
-    lower.pop();
-    upper.pop();
-    return [...lower, ...upper];
-  }, [competitionPool]);
-
   // Tier counts for legend
   const tierCounts = useMemo(() => {
     const counts = { 'competition-ready': 0, 'near-ready': 0, 'specialist': 0, 'not-ready': 0 };
@@ -970,29 +920,6 @@ const StudentScatterPlot: React.FC<{
             x2={width - padding.right} y2={yScale(medians.readiness)}
             stroke="#6b7280" strokeWidth="2" strokeDasharray="8,6" opacity="0.7"
           />
-
-          {/* Competition pool convex hull */}
-          {convexHullPoints.length >= 3 && (
-            <polygon
-              points={convexHullPoints.map(p => `${xScale(p.x)},${yScale(p.y)}`).join(' ')}
-              fill="#22c55e"
-              fillOpacity="0.1"
-              stroke="#22c55e"
-              strokeWidth="3"
-              strokeDasharray="6,3"
-            />
-          )}
-
-          {/* Competition Pool label */}
-          {convexHullPoints.length >= 3 && (
-            <text
-              x={xScale(Math.max(...convexHullPoints.map(p => p.x)) - 2)}
-              y={yScale(Math.max(...convexHullPoints.map(p => p.y)) + 2)}
-              className="text-[12px] fill-green-700 font-black"
-            >
-              COMPETITION POOL
-            </text>
-          )}
 
           {/* X-axis labels - 30-80 range */}
           {[30, 40, 50, 60, 70, 80].map(v => (
