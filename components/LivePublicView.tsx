@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppState, HistoryEntry, StudentProgress } from '../types';
-import { loadHistory, loadPublicViewState, updatePublicSettings } from '../services/storageService';
+import { loadHistory, loadPublicViewState, updatePublicSettings, clearStateCache } from '../services/storageService';
 import { DEFAULT_CLASSES } from '../constants';
 
 const LivePublicView: React.FC = () => {
@@ -77,6 +77,9 @@ const LivePublicView: React.FC = () => {
     try {
       // Update public settings in database
       await updatePublicSettings(undefined, newClassId);
+
+      // Clear cache so we definitely fetch the updated class
+      clearStateCache();
 
       // Load new class data
       const loadedState = await loadPublicViewState();

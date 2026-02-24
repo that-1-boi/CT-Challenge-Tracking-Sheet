@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, HistoryEntry, StudentProgress } from '../types';
-import { loadState, saveState, loadHistory } from '../services/storageService';
+import { loadState, loadStateMetadata, saveState, loadHistory } from '../services/storageService';
 import { dispatchSyncEvent, setLastSyncTimestamp } from '../services/syncEvents';
 
 const Dashboard: React.FC = () => {
@@ -12,30 +12,41 @@ const Dashboard: React.FC = () => {
   const isInitialLoad = useRef(true);
   const stateRef = useRef<AppState | null>(null); // For beforeunload access
 
-  // Load state and history from database on mount
+  // Load state metadata first, then fetch the current theme's progress
   useEffect(() => {
-    console.log('Dashboard: Starting to load state and history...');
-    Promise.all([loadState(), loadHistory()]).then(([loadedState, loadedHistory]) => {
-      console.log('Dashboard: ===== DATA LOADED FROM DATABASE =====');
-      console.log('Dashboard: Themes:', loadedState.themes.length);
-      console.log('Dashboard: Current theme:', loadedState.currentWeekTheme);
-      console.log('Dashboard: History entries:', loadedHistory.length);
-      console.log('Dashboard: =====================================');
+    const loadAll = async () => {
+      try {
+        console.log('Dashboard: Loading metadata...');
+        const meta = await loadStateMetadata();
+        console.log('Dashboard: metadata loaded, current theme=', meta.currentWeekTheme);
 
-      // Ensure progress exists as an object
-      if (!loadedState.progress) {
-        loadedState.progress = {};
+        console.log('Dashboard: Loading full state for theme', meta.currentWeekTheme);
+        const loadedState = await loadState(false, meta.currentWeekTheme);
+
+        console.log('Dashboard: Loading history...');
+        const loadedHistory = await loadHistory();
+
+        console.log('Dashboard: ===== DATA LOADED FROM DATABASE =====');
+        console.log('Dashboard: Themes:', loadedState.themes.length);
+        console.log('Dashboard: Current theme:', loadedState.currentWeekTheme);
+        console.log('Dashboard: History entries:', loadedHistory.length);
+        console.log('Dashboard: =====================================');
+
+        if (!loadedState.progress) {
+          loadedState.progress = {};
+        }
+
+        setState(loadedState);
+        setHistory(loadedHistory);
+      } catch (error) {
+        console.error('Dashboard: Error loading data:', error);
+      } finally {
+        setLoading(false);
+        isInitialLoad.current = false;
       }
+    };
 
-      setState(loadedState);
-      setHistory(loadedHistory);
-      setLoading(false);
-      isInitialLoad.current = false;
-    }).catch(error => {
-      console.error('Dashboard: Error loading data:', error);
-      setLoading(false);
-      isInitialLoad.current = false;
-    });
+    loadAll();
   }, []);
 
   // Keep stateRef in sync for beforeunload handler
@@ -199,11 +210,10 @@ const Dashboard: React.FC = () => {
             <button
               onClick={syncToCloud}
               disabled={!hasUnsavedChanges || saveStatus === 'saving'}
-              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-sm text-[7px] sm:text-[8px] font-black uppercase tracking-widest transition-all ${
-                hasUnsavedChanges
+              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 rounded-sm text-[7px] sm:text-[8px] font-black uppercase tracking-widest transition-all ${hasUnsavedChanges
                   ? 'bg-[#f4c514] text-black hover:bg-black hover:text-[#f4c514] cursor-pointer'
                   : 'bg-green-600 text-white cursor-default'
-              } ${saveStatus === 'saving' ? 'opacity-50 cursor-wait' : ''}`}
+                } ${saveStatus === 'saving' ? 'opacity-50 cursor-wait' : ''}`}
             >
               {saveStatus === 'saving' ? (
                 <>
@@ -248,9 +258,21 @@ const Dashboard: React.FC = () => {
                 {state.currentWeekTheme}
                 <select
                   value={state.currentWeekTheme}
-                  onChange={(e) => {
-                    console.log('Dashboard: Switching to theme:', e.target.value);
-                    setState(prev => prev ? ({ ...prev, currentWeekTheme: e.target.value }) : prev);
+                  onChange={async (e) => {
+                    const newTheme = e.target.value;
+                    console.log('Dashboard: Switching to theme:', newTheme);
+                    setLoading(true);
+                    try {
+                      const newState = await loadState(true, newTheme);
+                      if (!newState.progress) newState.progress = {};
+                      setState(newState);
+                    } catch (err) {
+                      console.error('Dashboard: Failed to load theme state:', err);
+                      // fallback: still update the theme label locally
+                      setState(prev => prev ? ({ ...prev, currentWeekTheme: newTheme }) : prev);
+                    } finally {
+                      setLoading(false);
+                    }
                   }}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 >

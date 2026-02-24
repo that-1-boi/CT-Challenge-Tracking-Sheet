@@ -95,28 +95,38 @@ async function setAppSetting(key: string, value: string): Promise<void> {
 // STATE CACHING (reduces egress by caching app state for 5 minutes)
 // =============================================================================
 
+// -----------------------------------------------------------------------------
+// CACHE CONFIGURATION
+// -----------------------------------------------------------------------------
+// single shared cache for authenticated state (used by loadState)
 const STATE_CACHE_KEY = 'ct_app_state_cache';
+// keep state around for 5 minutes by default – themes rarely change but
+// progress can update frequently, so this is a short, conservative window.
 const STATE_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+// public view has its own cache because it is polled much less often
+const PUBLIC_STATE_CACHE_KEY = 'ct_public_view_cache';
+const PUBLIC_STATE_CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 interface StateCache {
   data: AppState;
   timestamp: number;
 }
 
-function getCachedState(): AppState | null {
+function getCachedState(key = STATE_CACHE_KEY, duration = STATE_CACHE_DURATION_MS): AppState | null {
   try {
-    const cached = localStorage.getItem(STATE_CACHE_KEY);
+    const cached = localStorage.getItem(key);
     if (!cached) return null;
 
     const { data, timestamp }: StateCache = JSON.parse(cached);
     const age = Date.now() - timestamp;
 
-    if (age < STATE_CACHE_DURATION_MS) {
-      console.log(`📦 Using cached state (${Math.round(age / 1000)}s old)`);
+    if (age < duration) {
+      console.log(`📦 Using cached state (${Math.round(age / 1000)}s old) [${key}]`);
       return data;
     }
 
-    console.log('📦 State cache expired, will refresh');
+    console.log(`📦 Cache '${key}' expired, will refresh`);
     return null;
   } catch (error) {
     console.error('Error reading state cache:', error);
@@ -124,14 +134,14 @@ function getCachedState(): AppState | null {
   }
 }
 
-function setCachedState(data: AppState): void {
+function setCachedState(data: AppState, key = STATE_CACHE_KEY): void {
   try {
     const cache: StateCache = {
       data,
       timestamp: Date.now()
     };
-    localStorage.setItem(STATE_CACHE_KEY, JSON.stringify(cache));
-    console.log('📦 State cached for 5 minutes');
+    localStorage.setItem(key, JSON.stringify(cache));
+    console.log(`📦 State cached under '${key}'`);
   } catch (error) {
     console.error('Error caching state:', error);
   }
@@ -139,24 +149,35 @@ function setCachedState(data: AppState): void {
 
 export function clearStateCache(): void {
   localStorage.removeItem(STATE_CACHE_KEY);
-  console.log('📦 State cache cleared');
+  localStorage.removeItem(PUBLIC_STATE_CACHE_KEY);
+  console.log('📦 All state caches cleared');
 }
 
 // =============================================================================
 // LOAD STATE FROM DATABASE
 // =============================================================================
 
-export const loadState = async (forceRefresh = false): Promise<AppState> => {
+// helper used internally so we can cache differently based on filter
+function cacheKeyForTheme(filter?: string) {
+  if (filter) return `${STATE_CACHE_KEY}_theme_${filter}`;
+  return STATE_CACHE_KEY;
+}
+
+export const loadState = async (
+  forceRefresh = false,
+  themeFilter?: string
+): Promise<AppState> => {
   // Check cache first (unless forcing refresh)
+  const key = cacheKeyForTheme(themeFilter);
   if (!forceRefresh) {
-    const cached = getCachedState();
+    const cached = getCachedState(key, STATE_CACHE_DURATION_MS);
     if (cached) {
       return cached;
     }
   }
 
   try {
-    console.log('🔄 Loading state from database...');
+    console.log('🔄 Loading state from database' + (themeFilter ? ` (theme=${themeFilter})` : '') + '...');
     const startTime = Date.now();
 
     // 1. Load all themes (excluding large image columns to reduce egress)
@@ -195,9 +216,21 @@ export const loadState = async (forceRefresh = false): Promise<AppState> => {
     }
 
     // 4. Load all progress (only needed columns)
-    const { data: progressData, error: progressError } = await supabase
+    // if a themeFilter was provided, restrict the query to that theme's id(s)
+    let progressQuery = supabase
       .from('student_progress')
       .select('id, student_id, theme_id, class_session_id, challenge_1_completed, challenge_2_completed, challenge_3_completed, challenge_4_completed, challenge_5_completed, last_updated');
+
+    if (themeFilter) {
+      const themeRow = themesData?.find((t: any) => t.name === themeFilter);
+      if (themeRow) {
+        progressQuery = progressQuery.eq('theme_id', themeRow.id);
+      } else {
+        console.warn(`loadState: theme filter '${themeFilter}' not found`);
+      }
+    }
+
+    const { data: progressData, error: progressError } = await progressQuery;
 
     if (progressError) {
       console.error('✗ Error loading progress:', progressError);
@@ -303,12 +336,101 @@ export const loadState = async (forceRefresh = false): Promise<AppState> => {
       progress,
     };
 
-    // Cache the result for 5 minutes
-    setCachedState(result);
+    // Cache the result for 5 minutes under appropriate key
+    setCachedState(result, key);
 
     return result;
   } catch (error) {
     console.error('✗ Fatal error loading state:', error);
+    return getDefaultAppState();
+  }
+};
+
+// -----------------------------------------------------------------------------
+// METADATA-ONLY LOADER (no progress)
+// -----------------------------------------------------------------------------
+export const loadStateMetadata = async (forceRefresh = false): Promise<AppState> => {
+  const key = `${STATE_CACHE_KEY}_meta`;
+  if (!forceRefresh) {
+    const cached = getCachedState(key, STATE_CACHE_DURATION_MS);
+    if (cached) {
+      // return with empty progress
+      return { ...cached, progress: {} };
+    }
+  }
+
+  try {
+    console.log('🔍 Loading state metadata from database...');
+    // 1. Load themes
+    const { data: themesData, error: themesError } = await supabase
+      .from('themes')
+      .select('id, name, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5, category, created_at, updated_at')
+      .order('created_at', { ascending: true });
+
+    if (themesError) {
+      console.error('✗ Error loading themes:', themesError);
+      return getDefaultAppState();
+    }
+
+    if (!themesData || themesData.length === 0) {
+      console.log('ℹ No themes in database, using defaults');
+      return getDefaultAppState();
+    }
+
+    // 2. Load students
+    const { data: studentsData, error: studentsError } = await supabase
+      .from('students')
+      .select('id, name')
+      .order('name', { ascending: true });
+
+    if (studentsError) {
+      console.error('✗ Error loading students:', studentsError);
+    }
+
+    // 3. Load assignments
+    const { data: assignmentsData, error: assignmentsError } = await supabase
+      .from('student_assignments')
+      .select('student_id, theme_id, class_session_id');
+
+    if (assignmentsError) {
+      console.error('✗ Error loading assignments:', assignmentsError);
+    }
+
+    // 7. Load app settings
+    const currentWeekThemeName = (await getAppSetting('current_week_theme_id')) || themesData[0]?.name || '';
+    const publicThemeName = (await getAppSetting('public_theme_id')) || currentWeekThemeName;
+    const publicClassId = (await getAppSetting('public_class_id')) || DEFAULT_CLASSES[0].id;
+    const selectedClassId = (await getAppSetting('selected_class_id')) || DEFAULT_CLASSES[0].id;
+
+    // Build minimal state (progress empty)
+    const result: AppState = {
+      themes: themesData.map((themeRow: any) => ({
+        name: themeRow.name,
+        challenges: [
+          themeRow.challenge_1,
+          themeRow.challenge_2,
+          themeRow.challenge_3,
+          themeRow.challenge_4,
+          themeRow.challenge_5,
+        ],
+        classes: DEFAULT_CLASSES.map(defaultClass => ({
+          id: defaultClass.id,
+          name: defaultClass.name,
+          students: [],
+        })),
+        category: (themeRow.category as ThemeCategory) || undefined,
+      })),
+      currentWeekTheme: currentWeekThemeName,
+      publicThemeName,
+      publicClassId,
+      selectedClassId,
+      progress: {},
+    };
+
+    setCachedState(result, key);
+    return result;
+  } catch (error) {
+    console.error('✗ Fatal error loading metadata:', error);
     return getDefaultAppState();
   }
 };
@@ -582,6 +704,9 @@ export const saveState = async (state: AppState): Promise<void> => {
 
     const elapsed = Date.now() - startTime;
     console.log(`✅ State saved in ${elapsed}ms`);
+
+    // clear the in‑browser caches so subsequent loads will hit the database
+    clearStateCache();
   } catch (error) {
     console.error('✗ Fatal error saving state:', error);
     throw error;
@@ -796,6 +921,13 @@ export const loadPublicViewState = async (): Promise<AppState> => {
   const startTime = Date.now();
   console.log('📊 Loading public view state...');
 
+  // attempt cache first (24‑hour window)
+  const cached = getCachedState(PUBLIC_STATE_CACHE_KEY, PUBLIC_STATE_CACHE_DURATION_MS);
+  if (cached) {
+    console.log('📊 Returning cached public state');
+    return cached;
+  }
+
   // 1. Get current public settings
   const { publicThemeName, publicClassId } = await getPublicSettings();
 
@@ -879,6 +1011,7 @@ export const loadPublicViewState = async (): Promise<AppState> => {
       });
     }
   });
+
   const students = Array.from(studentMap.values());
 
   // 5. Build single theme object
@@ -920,10 +1053,46 @@ export const loadPublicViewState = async (): Promise<AppState> => {
     };
   });
 
-  const elapsed = Date.now() - startTime;
-  console.log(`✅ Public view state loaded in ${elapsed}ms`);
+  // 5. Build single theme object
+  const theme: Theme = {
+    name: themeData.name,
+    challenges: [
+      themeData.challenge_1,
+      themeData.challenge_2,
+      themeData.challenge_3,
+      themeData.challenge_4,
+      themeData.challenge_5
+    ],
+    classes: [
+      {
+        id: publicClassId,
+        name: DEFAULT_CLASSES.find(c => c.id === publicClassId)?.name || publicClassId,
+        students
+      }
+    ]
+  };
 
-  return {
+  // 6. Build progress map
+  const progress: Record<string, StudentProgress> = {};
+  (rosterData as RosterViewRow[]).forEach(row => {
+    const key = `${publicClassId}_${row.student_id}_${publicThemeName}`;
+    const challengesCompleted: string[] = [];
+
+    if (row.c1) challengesCompleted.push('c1');
+    if (row.c2) challengesCompleted.push('c2');
+    if (row.c3) challengesCompleted.push('c3');
+    if (row.c4) challengesCompleted.push('c4');
+    if (row.c5) challengesCompleted.push('c5');
+
+    progress[key] = {
+      studentId: row.student_id,
+      studentName: row.student_name,
+      challengesCompleted,
+      timestamp: row.last_updated ? new Date(row.last_updated).getTime() : 0
+    };
+  });
+
+  const result: AppState = {
     themes: [theme],
     currentWeekTheme: publicThemeName,
     publicThemeName,
@@ -931,6 +1100,14 @@ export const loadPublicViewState = async (): Promise<AppState> => {
     selectedClassId: publicClassId,
     progress
   };
+
+  // cache the public view for a day so repeat loads are zero‑egress
+  setCachedState(result, PUBLIC_STATE_CACHE_KEY);
+
+  const elapsed = Date.now() - startTime;
+  console.log(`✅ Public view state loaded in ${elapsed}ms`);
+
+  return result;
 };
 
 // =============================================================================
