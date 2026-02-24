@@ -265,6 +265,7 @@ const Dashboard: React.FC = () => {
                     try {
                       const newState = await loadState(true, newTheme);
                       if (!newState.progress) newState.progress = {};
+                      newState.currentWeekTheme = newTheme;
                       setState(newState);
                     } catch (err) {
                       console.error('Dashboard: Failed to load theme state:', err);
