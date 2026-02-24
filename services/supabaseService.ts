@@ -1053,45 +1053,6 @@ export const loadPublicViewState = async (): Promise<AppState> => {
     };
   });
 
-  // 5. Build single theme object
-  const theme: Theme = {
-    name: themeData.name,
-    challenges: [
-      themeData.challenge_1,
-      themeData.challenge_2,
-      themeData.challenge_3,
-      themeData.challenge_4,
-      themeData.challenge_5
-    ],
-    classes: [
-      {
-        id: publicClassId,
-        name: DEFAULT_CLASSES.find(c => c.id === publicClassId)?.name || publicClassId,
-        students
-      }
-    ]
-  };
-
-  // 6. Build progress map
-  const progress: Record<string, StudentProgress> = {};
-  (rosterData as RosterViewRow[]).forEach(row => {
-    const key = `${publicClassId}_${row.student_id}_${publicThemeName}`;
-    const challengesCompleted: string[] = [];
-
-    if (row.c1) challengesCompleted.push('c1');
-    if (row.c2) challengesCompleted.push('c2');
-    if (row.c3) challengesCompleted.push('c3');
-    if (row.c4) challengesCompleted.push('c4');
-    if (row.c5) challengesCompleted.push('c5');
-
-    progress[key] = {
-      studentId: row.student_id,
-      studentName: row.student_name,
-      challengesCompleted,
-      timestamp: row.last_updated ? new Date(row.last_updated).getTime() : 0
-    };
-  });
-
   const result: AppState = {
     themes: [theme],
     currentWeekTheme: publicThemeName,
