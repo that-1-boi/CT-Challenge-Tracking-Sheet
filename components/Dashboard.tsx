@@ -254,7 +254,7 @@ const Dashboard: React.FC = () => {
                   }}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 >
-                  {state.themes.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                  {[...state.themes].reverse().map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
                 </select>
               </span>
             </h1>
