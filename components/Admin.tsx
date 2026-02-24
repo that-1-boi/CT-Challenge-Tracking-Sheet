@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, Theme, Student, ThemeCategory } from '../types';
-import { loadState, saveState, getAllStudentsFromDB, deleteStudent, deleteTheme, updateThemeCategory } from '../services/storageService';
+import { loadState, saveState, getAllStudentsFromDB, deleteStudent, deleteTheme, updateThemeCategory, clearStateCache } from '../services/storageService';
 import { DEFAULT_CLASSES } from '../constants';
 import { dispatchSyncEvent, setLastSyncTimestamp } from '../services/syncEvents';
 
@@ -13,12 +13,12 @@ const Admin: React.FC = () => {
     progress: {},
     selectedClassId: DEFAULT_CLASSES[0].id,
   });
-  const [isLoading, setIsLoading] = useState(true);
   const [draggedStudent, setDraggedStudent] = useState<{ studentId: string; sourceClassId: string } | null>(null);
   const [dragOverClassId, setDragOverClassId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'synced' | 'syncing' | 'unsaved' | 'error'>('synced');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const stateRef = useRef<AppState | null>(null); // For beforeunload access
+  const isInitialLoad = useRef(true);
 
   const [newStudentNames, setNewStudentNames] = useState<Record<string, string>>({});
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
@@ -34,12 +34,15 @@ const Admin: React.FC = () => {
   const [totalStudentsInDB, setTotalStudentsInDB] = useState<number>(0);
 
   useEffect(() => {
-    // Load state on mount and get total student count from database
-    Promise.all([loadState(), getAllStudentsFromDB()]).then(([loadedState, allStudents]) => {
+    // Clear state cache and force a fresh DB load so Admin always has complete data
+    clearStateCache();
+    Promise.all([loadState(true), getAllStudentsFromDB()]).then(([loadedState, allStudents]) => {
       setState(loadedState);
       setTotalStudentsInDB(allStudents.length);
-      setIsLoading(false);
       setSaveStatus('All changes saved');
+      // Mark initial load complete AFTER state is set so the unsaved-changes
+      // effect doesn't fire on this first render
+      isInitialLoad.current = false;
     });
   }, []);
 
@@ -50,11 +53,11 @@ const Admin: React.FC = () => {
 
   // Track unsaved changes when state changes (but not on initial load)
   useEffect(() => {
-    if (!isLoading) {
+    if (!isInitialLoad.current) {
       setHasUnsavedChanges(true);
       setSaveStatus('unsaved');
     }
-  }, [state, isLoading]);
+  }, [state]);
 
   // Manual sync function - only saves when explicitly called
   const syncToCloud = useCallback(async () => {

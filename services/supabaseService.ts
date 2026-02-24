@@ -498,6 +498,12 @@ export const loadState = async (forceRefresh = false): Promise<AppState> => {
 // =============================================================================
 
 export const saveState = async (state: AppState): Promise<void> => {
+  // Guard: never save an empty/default state — this would wipe all DB data
+  if (!state.themes || state.themes.length === 0) {
+    console.warn('💾 saveState called with empty themes — aborting to protect DB data');
+    return;
+  }
+
   try {
     console.log('💾 Saving state to database...');
     const startTime = Date.now();
@@ -728,7 +734,9 @@ export const saveState = async (state: AppState): Promise<void> => {
         return studentId === assignment.student_id && themeId === assignment.theme_id;
       });
 
-      // If no progress exists, create an empty progress record
+      // If no progress exists, create an empty progress record.
+      // IMPORTANT: ignoreDuplicates:true means this only INSERTs new records —
+      // it will never overwrite existing progress data for this student+theme.
       if (!existingProgress) {
         const { error } = await supabase
           .from('student_progress')
@@ -742,7 +750,7 @@ export const saveState = async (state: AppState): Promise<void> => {
             challenge_4_completed: false,
             challenge_5_completed: false,
             last_updated: new Date().toISOString(),
-          }, { onConflict: 'student_id,theme_id' });
+          }, { onConflict: 'student_id,theme_id', ignoreDuplicates: true });
 
         if (!error) {
           progressInitialized++;
