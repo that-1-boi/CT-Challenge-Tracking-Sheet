@@ -200,6 +200,53 @@ export function invalidatePublicViewCache(themeName: string): void {
 }
 
 // =============================================================================
+// PUBLIC VIEW SETTINGS CACHE (5-min TTL so admin changes propagate quickly)
+// =============================================================================
+
+const PUBLIC_SETTINGS_CACHE_KEY = 'ct_public_settings';
+const PUBLIC_SETTINGS_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+interface PublicSettingsCacheEntry {
+  themeName: string;
+  classId: string;
+  cachedAt: number;
+}
+
+function getCachedPublicSettings(): { themeName: string; classId: string } | null {
+  try {
+    const str = localStorage.getItem(PUBLIC_SETTINGS_CACHE_KEY);
+    if (!str) return null;
+    const entry: PublicSettingsCacheEntry = JSON.parse(str);
+    if (Date.now() - entry.cachedAt > PUBLIC_SETTINGS_CACHE_DURATION_MS) return null;
+    return { themeName: entry.themeName, classId: entry.classId };
+  } catch {
+    return null;
+  }
+}
+
+function setCachedPublicSettings(themeName: string, classId: string): void {
+  try {
+    localStorage.setItem(PUBLIC_SETTINGS_CACHE_KEY, JSON.stringify({ themeName, classId, cachedAt: Date.now() }));
+  } catch {}
+}
+
+function clearPublicSettingsCache(): void {
+  try {
+    localStorage.removeItem(PUBLIC_SETTINGS_CACHE_KEY);
+  } catch {}
+}
+
+/**
+ * Synchronous cache lookup — used as React useState lazy initializer so the
+ * component can render immediately with cached data (0 DB calls, 0 wait).
+ */
+export function getPublicViewFromCacheSync(): AppState | null {
+  const settings = getCachedPublicSettings();
+  if (!settings) return null;
+  return getCachedPublicView(settings.themeName, settings.classId);
+}
+
+// =============================================================================
 // LOAD STATE FROM DATABASE
 // =============================================================================
 
@@ -850,10 +897,20 @@ export const getPublicSettings = async (): Promise<{
 };
 
 export const loadPublicViewState = async (): Promise<AppState> => {
+  // Fast path: settings cache + data cache → zero DB calls, instant response
+  const cachedSettings = getCachedPublicSettings();
+  if (cachedSettings) {
+    const cachedData = getCachedPublicView(cachedSettings.themeName, cachedSettings.classId);
+    if (cachedData) {
+      console.log('📦 Public view served entirely from cache (0 DB calls)');
+      return cachedData;
+    }
+  }
+
   const startTime = Date.now();
   console.log('📊 Loading public view state...');
 
-  // 1. Get current public settings
+  // 1. Get current public settings from DB (cache miss or expired)
   const { publicThemeName, publicClassId } = await getPublicSettings();
 
   if (!publicThemeName) {
@@ -861,7 +918,10 @@ export const loadPublicViewState = async (): Promise<AppState> => {
     return getDefaultAppState();
   }
 
-  // 2. Check cache — return immediately if available (only invalidated on progress changes)
+  // Persist settings so next visit can skip this DB call
+  setCachedPublicSettings(publicThemeName, publicClassId);
+
+  // 2. Check data cache with DB-confirmed settings
   const cached = getCachedPublicView(publicThemeName, publicClassId);
   if (cached) return cached;
 
@@ -1230,6 +1290,10 @@ export const updatePublicSettings = async (
   publicThemeName?: string,
   publicClassId?: string
 ): Promise<void> => {
+  // Clear settings cache so the next loadPublicViewState re-reads from DB
+  // (ensures class/theme changes take effect immediately)
+  clearPublicSettingsCache();
+
   const updates = [];
 
   if (publicThemeName !== undefined) {

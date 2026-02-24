@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AppState, HistoryEntry, StudentProgress } from '../types';
-import { loadHistory, loadPublicViewState, updatePublicSettings } from '../services/storageService';
+import { AppState, StudentProgress } from '../types';
+import { loadPublicViewState, updatePublicSettings, getPublicViewFromCacheSync } from '../services/storageService';
 import { DEFAULT_CLASSES } from '../constants';
 
 const LivePublicView: React.FC = () => {
-  const [state, setState] = useState<AppState | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Initialize synchronously from localStorage — zero DB calls, zero wait on revisit
+  const [state, setState] = useState<AppState | null>(getPublicViewFromCacheSync);
+  const [loading, setLoading] = useState<boolean>(() => getPublicViewFromCacheSync() === null);
 
   // Track user's manual class selection separately
   const userSelectedClassId = useRef<string | null>(null);
@@ -14,14 +14,8 @@ const LivePublicView: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Use optimized load function that only loads public view data
-        const [loadedState, loadedHistory] = await Promise.all([
-          loadPublicViewState(),
-          loadHistory()
-        ]);
-        console.log('LivePublicView: Loaded', loadedHistory.length, 'history entries');
+        const loadedState = await loadPublicViewState();
         setState(loadedState);
-        setHistory(loadedHistory);
         setLoading(false);
       } catch (error) {
         console.error('Error loading data:', error);
@@ -31,30 +25,21 @@ const LivePublicView: React.FC = () => {
 
     loadData();
 
-    // Refresh once per day (24 hours) to minimize egress
-    // Data is updated daily, so frequent polling is unnecessary
+    // Refresh once per day — cache handles normal revisits;
+    // this catches admin theme/class changes after the 5-min settings TTL expires
     const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
     const interval = setInterval(async () => {
       try {
         console.log('LivePublicView: Daily refresh triggered');
-        // Use optimized load function for refresh
-        const [loadedState, loadedHistory] = await Promise.all([
-          loadPublicViewState(),
-          loadHistory()
-        ]);
+        const loadedState = await loadPublicViewState();
 
-        // If user has manually selected a class, preserve it
+        // Preserve any manual class selection the user made
         if (userSelectedClassId.current) {
-          setState({
-            ...loadedState,
-            publicClassId: userSelectedClassId.current
-          });
+          setState({ ...loadedState, publicClassId: userSelectedClassId.current });
         } else {
           setState(loadedState);
         }
-
-        setHistory(loadedHistory);
       } catch (error) {
         console.error('Error refreshing state:', error);
       }
