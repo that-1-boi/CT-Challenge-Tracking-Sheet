@@ -1074,8 +1074,8 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
     const containerRect = containerRef.current.getBoundingClientRect();
     const circleRect = event.currentTarget.getBoundingClientRect();
 
-    // Estimate tooltip width based on text length (approx 8px per char + padding)
-    const estimatedTooltipWidth = themeName.length * 8 + 24;
+    // Estimate tooltip width based on text length (approx 9px per char + padding)
+    const estimatedTooltipWidth = themeName.length * 9 + 24;
     const tooltipHeight = 30;
     const edgePadding = 5;
 
