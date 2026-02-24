@@ -143,6 +143,63 @@ export function clearStateCache(): void {
 }
 
 // =============================================================================
+// PUBLIC VIEW CACHE (no TTL — invalidated only when student progress changes)
+// =============================================================================
+
+const PUBLIC_VIEW_CACHE_PREFIX = 'ct_public_view_';
+
+interface PublicViewCacheEntry {
+  data: AppState;
+  themeName: string;
+  classId: string;
+  cachedAt: number;
+}
+
+function getPublicViewCacheKey(themeName: string, classId: string): string {
+  return `${PUBLIC_VIEW_CACHE_PREFIX}${themeName}_${classId}`;
+}
+
+function getCachedPublicView(themeName: string, classId: string): AppState | null {
+  try {
+    const key = getPublicViewCacheKey(themeName, classId);
+    const cached = localStorage.getItem(key);
+    if (!cached) return null;
+    const entry: PublicViewCacheEntry = JSON.parse(cached);
+    console.log(`📦 Public view cache hit for ${themeName}/${classId} (cached ${Math.round((Date.now() - entry.cachedAt) / 1000)}s ago)`);
+    return entry.data;
+  } catch (error) {
+    console.error('Error reading public view cache:', error);
+    return null;
+  }
+}
+
+function setCachedPublicView(themeName: string, classId: string, data: AppState): void {
+  try {
+    const key = getPublicViewCacheKey(themeName, classId);
+    const entry: PublicViewCacheEntry = { data, themeName, classId, cachedAt: Date.now() };
+    localStorage.setItem(key, JSON.stringify(entry));
+    console.log(`📦 Public view cached for ${themeName}/${classId}`);
+  } catch (error) {
+    console.error('Error caching public view:', error);
+  }
+}
+
+export function invalidatePublicViewCache(themeName: string): void {
+  try {
+    const prefix = `${PUBLIC_VIEW_CACHE_PREFIX}${themeName}_`;
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(prefix)) keysToRemove.push(key);
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+    console.log(`📦 Public view cache invalidated for theme: ${themeName} (${keysToRemove.length} entries removed)`);
+  } catch (error) {
+    console.error('Error invalidating public view cache:', error);
+  }
+}
+
+// =============================================================================
 // LOAD STATE FROM DATABASE
 // =============================================================================
 
@@ -804,7 +861,11 @@ export const loadPublicViewState = async (): Promise<AppState> => {
     return getDefaultAppState();
   }
 
-  // 2. Load ONLY the public theme and class data using the optimized view (select only needed columns)
+  // 2. Check cache — return immediately if available (only invalidated on progress changes)
+  const cached = getCachedPublicView(publicThemeName, publicClassId);
+  if (cached) return cached;
+
+  // 3. Load ONLY the public theme and class data using the optimized view (select only needed columns)
   const { data: rosterData, error } = await supabase
     .from('v_student_roster')
     .select('student_id, student_name, theme_id, theme_name, class_session_id, class_session_name, c1, c2, c3, c4, c5, last_updated, assigned_at')
@@ -843,7 +904,7 @@ export const loadPublicViewState = async (): Promise<AppState> => {
         }]
       };
 
-      return {
+      const result = {
         themes: [theme],
         currentWeekTheme: publicThemeName,
         publicThemeName,
@@ -851,6 +912,8 @@ export const loadPublicViewState = async (): Promise<AppState> => {
         selectedClassId: publicClassId,
         progress: {}
       };
+      setCachedPublicView(publicThemeName, publicClassId, result);
+      return result;
     }
 
     return getDefaultAppState();
@@ -923,7 +986,7 @@ export const loadPublicViewState = async (): Promise<AppState> => {
   const elapsed = Date.now() - startTime;
   console.log(`✅ Public view state loaded in ${elapsed}ms`);
 
-  return {
+  const result = {
     themes: [theme],
     currentWeekTheme: publicThemeName,
     publicThemeName,
@@ -931,6 +994,8 @@ export const loadPublicViewState = async (): Promise<AppState> => {
     selectedClassId: publicClassId,
     progress
   };
+  setCachedPublicView(publicThemeName, publicClassId, result);
+  return result;
 };
 
 // =============================================================================
@@ -1229,6 +1294,8 @@ export const updateStudentProgress = async (
     }
 
     console.log('Dashboard: Progress saved successfully');
+    // Invalidate the public view cache so the next page load reflects the new data
+    invalidatePublicViewCache(themeName);
   } catch (error) {
     console.error('Dashboard: Fatal error updating student progress:', error);
     throw error;

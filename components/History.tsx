@@ -205,7 +205,7 @@ const History: React.FC = () => {
       alert("No data to export!");
       return;
     }
-    const uniqueThemes = Array.from(new Set(filteredHistory.map(h => h.weekTheme || 'Uncategorized'))).sort();
+    const uniqueThemes = Array.from(new Set<string>(filteredHistory.map(h => h.weekTheme || 'Uncategorized'))).sort();
     const uniqueStudents = Array.from(new Set(filteredHistory.map(h => h.studentName))).sort();
     const exportData = uniqueStudents.map(studentName => {
       const row: any = { 'Student Name': studentName };
