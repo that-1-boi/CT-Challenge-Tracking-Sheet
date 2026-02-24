@@ -753,21 +753,21 @@ const StudentScatterPlot: React.FC<{
     });
   }, [profiles, studentAttributesMap]);
 
-  // Calculate medians for crosshairs
+  // Calculate medians for crosshairs (using new axes: technical & readiness)
   const medians = useMemo(() => {
-    if (profiles.length === 0) return { mechanical: 50, programming: 50 };
-    const mechScores = profiles.map(p => p.mechanicalScore).sort((a, b) => a - b);
-    const progScores = profiles.map(p => p.programmingScore).sort((a, b) => a - b);
-    const mid = Math.floor(profiles.length / 2);
+    if (studentPoints.length === 0) return { technical: 50, readiness: 50 };
+    const techScores = studentPoints.map(p => p.profile.overallScore).sort((a, b) => a - b);
+    const readinessScores = studentPoints.map(p => p.compositeScore).sort((a, b) => a - b);
+    const mid = Math.floor(studentPoints.length / 2);
     return {
-      mechanical: profiles.length % 2 === 0
-        ? (mechScores[mid - 1] + mechScores[mid]) / 2
-        : mechScores[mid],
-      programming: profiles.length % 2 === 0
-        ? (progScores[mid - 1] + progScores[mid]) / 2
-        : progScores[mid],
+      technical: studentPoints.length % 2 === 0
+        ? (techScores[mid - 1] + techScores[mid]) / 2
+        : techScores[mid],
+      readiness: studentPoints.length % 2 === 0
+        ? (readinessScores[mid - 1] + readinessScores[mid]) / 2
+        : readinessScores[mid],
     };
-  }, [profiles]);
+  }, [studentPoints]);
 
   // Calculate competition pool (top 15-20% by curved average)
   const competitionPool = useMemo(() => {
@@ -777,15 +777,19 @@ const StudentScatterPlot: React.FC<{
     return sorted.slice(0, topCount);
   }, [profiles]);
 
-  // Calculate convex hull for competition pool
+  // Calculate convex hull for competition pool (using new axes)
   const convexHullPoints = useMemo(() => {
     if (competitionPool.length < 3) return [];
 
-    // Get points for convex hull calculation
-    const points = competitionPool.map(p => ({
-      x: p.mechanicalScore,
-      y: p.programmingScore,
-    }));
+    // Get points for convex hull calculation using new axes
+    // Need to find matching studentPoints to get compositeScore
+    const points = competitionPool.map(p => {
+      const sp = studentPoints.find(sp => sp.profile.studentId === p.studentId);
+      return {
+        x: p.overallScore,
+        y: sp?.compositeScore ?? p.overallScore,
+      };
+    });
 
     // Gift wrapping algorithm for convex hull
     const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) =>
@@ -904,10 +908,10 @@ const StudentScatterPlot: React.FC<{
       <div className="flex items-start justify-between mb-4 flex-wrap gap-4">
         <div>
           <h3 className="text-sm font-black uppercase tracking-widest border-l-4 border-[#f4c514] pl-3 italic">
-            Comp Readiness Map
+            Competition Readiness Map
           </h3>
           <p className="text-[16px] text-gray-500 mt-1 pl-4">
-            X = Mechanical | Y = Programming | Size = Overall Score
+            X = Technical Score | Y = Readiness (Tech + Attributes) | Color = Attribute Quality
           </p>
         </div>
 
@@ -947,13 +951,13 @@ const StudentScatterPlot: React.FC<{
 
           {/* Median crosshairs */}
           <line
-            x1={xScale(medians.mechanical)} y1={padding.top}
-            x2={xScale(medians.mechanical)} y2={height - padding.bottom}
+            x1={xScale(medians.technical)} y1={padding.top}
+            x2={xScale(medians.technical)} y2={height - padding.bottom}
             stroke="#6b7280" strokeWidth="2" strokeDasharray="8,6" opacity="0.7"
           />
           <line
-            x1={padding.left} y1={yScale(medians.programming)}
-            x2={width - padding.right} y2={yScale(medians.programming)}
+            x1={padding.left} y1={yScale(medians.readiness)}
+            x2={width - padding.right} y2={yScale(medians.readiness)}
             stroke="#6b7280" strokeWidth="2" strokeDasharray="8,6" opacity="0.7"
           />
 
@@ -986,8 +990,8 @@ const StudentScatterPlot: React.FC<{
               {v}
             </text>
           ))}
-          <text x={width / 2} y={height - 15} textAnchor="middle" className="text-[16px] fill-orange-600 font-black uppercase">
-            Mechanical Proficiency
+          <text x={width / 2} y={height - 15} textAnchor="middle" className="text-[16px] fill-gray-700 font-black uppercase">
+            Technical Score
           </text>
 
           {/* Y-axis labels - 30-80 range */}
@@ -996,8 +1000,8 @@ const StudentScatterPlot: React.FC<{
               {v}
             </text>
           ))}
-          <text x={25} y={height / 2} textAnchor="middle" transform={`rotate(-90, 25, ${height / 2})`} className="text-[16px] fill-blue-600 font-black uppercase">
-            Programming Proficiency
+          <text x={25} y={height / 2} textAnchor="middle" transform={`rotate(-90, 25, ${height / 2})`} className="text-[16px] fill-purple-600 font-black uppercase">
+            Readiness Score
           </text>
 
           {/* Student points - sorted so smaller (higher score) on top */}
@@ -1012,8 +1016,8 @@ const StudentScatterPlot: React.FC<{
             return (
               <circle
                 key={point.profile.studentId}
-                cx={xScale(point.profile.mechanicalScore) + jitterX}
-                cy={yScale(point.profile.programmingScore) + jitterY}
+                cx={xScale(point.profile.overallScore) + jitterX}
+                cy={yScale(point.compositeScore) + jitterY}
                 r={isHovered ? r + 3 : r}
                 fill={point.attributeColor}
                 fillOpacity={point.hasAttributes ? 0.85 : 0.5}
