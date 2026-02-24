@@ -596,21 +596,28 @@ export const saveState = async (state: AppState): Promise<void> => {
       }
     }
 
-    // Delete old assignments and insert new ones
+    // Delete old assignments and insert new ones.
+    // IMPORTANT: only delete assignments within themes that are present in the
+    // current state. Never delete assignments for themes we didn't load — those
+    // themes simply weren't part of this save and must be left untouched.
+    const managedThemeIds = new Set(currentAssignments.map(a => a.theme_id));
+
     const { data: existingAssignments } = await supabase
       .from('student_assignments')
       .select('student_id, theme_id, class_session_id');
 
-    // Find assignments to delete (exist in DB but not in current state)
+    // Find assignments to delete: only within managed themes AND no longer in state
     const currentKeys = new Set(
       currentAssignments.map(a => `${a.student_id}_${a.theme_id}`)
     );
 
     const toDelete = (existingAssignments || []).filter(
-      (a: any) => !currentKeys.has(`${a.student_id}_${a.theme_id}`)
+      (a: any) =>
+        managedThemeIds.has(a.theme_id) &&
+        !currentKeys.has(`${a.student_id}_${a.theme_id}`)
     );
 
-    // Batch delete orphaned assignments
+    // Batch delete orphaned assignments (within managed themes only)
     if (toDelete.length > 0) {
       for (const assignment of toDelete) {
         await supabase
