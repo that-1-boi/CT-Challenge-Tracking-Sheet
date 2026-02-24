@@ -443,25 +443,22 @@ const StudentAnalytics: React.FC = () => {
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Search Column - collapses when student selected */}
           <div
-            className={`shrink-0 space-y-3 transition-all duration-300 ${
-              selectedStudent
+            className={`shrink-0 space-y-3 transition-all duration-300 ${selectedStudent
                 ? 'w-full lg:w-14 group'
                 : 'w-full lg:w-56 xl:w-64'
-            }`}
+              }`}
             onMouseEnter={() => selectedStudent && setSearchFocused(true)}
             onMouseLeave={() => selectedStudent && setSearchFocused(false)}
           >
             {/* Search bar container - always visible */}
             <div className="relative">
-              <i className={`fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs transition-opacity ${
-                selectedStudent && !searchFocused ? 'opacity-100' : 'opacity-100'
-              }`}></i>
+              <i className={`fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs transition-opacity ${selectedStudent && !searchFocused ? 'opacity-100' : 'opacity-100'
+                }`}></i>
               <input
                 type="text"
                 placeholder={selectedStudent && !searchFocused ? "" : "Filter students..."}
-                className={`w-full bg-[#fff1d1] border border-[#f4c514] p-3 pl-10 font-bold text-gray-800 focus:outline-none text-sm capitalize placeholder:text-gray-400 transition-all duration-300 ${
-                  selectedStudent && !searchFocused ? 'cursor-pointer' : ''
-                }`}
+                className={`w-full bg-[#fff1d1] border border-[#f4c514] p-3 pl-10 font-bold text-gray-800 focus:outline-none text-sm capitalize placeholder:text-gray-400 transition-all duration-300 ${selectedStudent && !searchFocused ? 'cursor-pointer' : ''
+                  }`}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onFocus={() => setSearchFocused(true)}
@@ -488,13 +485,12 @@ const StudentAnalytics: React.FC = () => {
             </div>
 
             {/* Desktop list - shows on hover when student is selected, always visible otherwise */}
-            <div className={`hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[500px] overflow-y-auto shadow-sm transition-all duration-300 ${
-              selectedStudent
+            <div className={`hidden lg:block bg-[#fff1d1] border border-[#ffe5a0] rounded-sm divide-y divide-[#ffe5a0] max-h-[500px] overflow-y-auto shadow-sm transition-all duration-300 ${selectedStudent
                 ? searchFocused
                   ? 'opacity-100 visible w-56 xl:w-64 absolute z-50'
                   : 'opacity-0 invisible h-0 overflow-hidden'
                 : 'opacity-100 visible'
-            }`}>
+              }`}>
               {filteredStudents.length > 0 ? (
                 filteredStudents.map(profile => (
                   <button
@@ -1553,11 +1549,10 @@ const StudentProfileCard: React.FC<{
               <button
                 onClick={handleSaveAttributes}
                 disabled={!attributesState.hasUnsavedChanges || isSaving}
-                className={`w-full mt-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all rounded-sm ${
-                  attributesState.hasUnsavedChanges
+                className={`w-full mt-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all rounded-sm ${attributesState.hasUnsavedChanges
                     ? 'bg-[#f4c514] text-black hover:bg-black hover:text-[#f4c514] cursor-pointer'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
+                  }`}
               >
                 {isSaving ? (
                   <>
