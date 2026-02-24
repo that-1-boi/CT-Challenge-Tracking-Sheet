@@ -306,9 +306,17 @@ async function loadRawAnalyticsData(): Promise<RawStudentThemeData[]> {
   );
 
   // Transform roster data into raw analytics data
+  // IMPORTANT: Only include students with actual progress data (last_updated not null)
+  // This filters out students who are assigned to themes but never participated
   const rawData: RawStudentThemeData[] = [];
 
   for (const row of rosterData || []) {
+    // Skip entries without actual progress data
+    // If last_updated is null, the student was assigned but never had any progress recorded
+    if (!row.last_updated) {
+      continue;
+    }
+
     const challengesCompleted =
       (row.c1 ? 1 : 0) +
       (row.c2 ? 1 : 0) +
@@ -326,8 +334,8 @@ async function loadRawAnalyticsData(): Promise<RawStudentThemeData[]> {
       challengesCompleted,
       totalChallenges: 5,
       completionPercent: (challengesCompleted / 5) * 100,
-      timestamp: row.last_updated ? new Date(row.last_updated).getTime() : 0,
-      date: row.last_updated || '',
+      timestamp: new Date(row.last_updated).getTime(),
+      date: row.last_updated,
       themeCreatedAt: themeCreatedAtMap.get(row.theme_name) || 0,
     });
   }
