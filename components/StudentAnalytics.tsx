@@ -1074,20 +1074,26 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
     const containerRect = containerRef.current.getBoundingClientRect();
     const circleRect = event.currentTarget.getBoundingClientRect();
 
-    // Calculate position relative to the container
-    let x = circleRect.left + circleRect.width / 2 - containerRect.left;
+    // Estimate tooltip width based on text length (approx 8px per char + padding)
+    const estimatedTooltipWidth = themeName.length * 8 + 24;
+    const tooltipHeight = 30;
+    const edgePadding = 5;
 
-    // Use fixed max-width (matches CSS max-width: 200px on tooltip)
-    const tooltipMaxWidth = 200;
-    const tooltipHeight = 40; // Account for potential text wrap
-    const edgePadding = 10;
+    // Calculate center position relative to container
+    const circleCenterX = circleRect.left + circleRect.width / 2 - containerRect.left;
 
-    // Clamp horizontal position to keep tooltip fully within container
-    const halfWidth = tooltipMaxWidth / 2;
-    if (x - halfWidth < edgePadding) {
-      x = halfWidth + edgePadding;
-    } else if (x + halfWidth > containerRect.width - edgePadding) {
-      x = containerRect.width - halfWidth - edgePadding;
+    // Calculate where tooltip edges would be if centered
+    const tooltipLeft = circleCenterX - estimatedTooltipWidth / 2;
+    const tooltipRight = circleCenterX + estimatedTooltipWidth / 2;
+
+    // Shift tooltip to stay within container bounds
+    let x = circleCenterX;
+    if (tooltipLeft < edgePadding) {
+      // Would overflow left - shift right
+      x = estimatedTooltipWidth / 2 + edgePadding;
+    } else if (tooltipRight > containerRect.width - edgePadding) {
+      // Would overflow right - shift left
+      x = containerRect.width - estimatedTooltipWidth / 2 - edgePadding;
     }
 
     // Vertical bounds - check if tooltip would overflow at bottom
@@ -1280,13 +1286,11 @@ const PerformanceLineGraph: React.FC<{ themeScores: StudentThemeScore[] }> = ({ 
         {/* HTML tooltip - positioned within container bounds */}
         {hoveredTheme && (
           <div
-            className="absolute z-50 bg-black text-white text-[14px] font-bold px-2 py-1 rounded pointer-events-none text-center"
+            className="absolute z-50 bg-black text-white text-[14px] font-bold px-3 py-1 rounded pointer-events-none whitespace-nowrap"
             style={{
               left: hoveredTheme.x,
               top: hoveredTheme.y,
               transform: hoveredTheme.showAbove ? 'translate(-50%, -100%)' : 'translateX(-50%)',
-              maxWidth: '200px',
-              wordWrap: 'break-word',
             }}
           >
             {hoveredTheme.name}
