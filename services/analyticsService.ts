@@ -17,7 +17,9 @@ import {
   StudentProfile,
   ClassSummary,
   AnalyticsResult,
+  StudentAttributesSummary,
 } from './analyticsTypes';
+import { loadAllStudentAttributes, StudentAttributesRow } from './supabaseService';
 
 // ============================================================================
 // DAILY CACHE FOR ANALYTICS (reduces egress by caching results for 24 hours)
@@ -26,8 +28,26 @@ import {
 const ANALYTICS_CACHE_KEY = 'analytics_cache';
 const ANALYTICS_CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// Serializable cache format (Map converted to array entries)
+interface AnalyticsCacheData {
+  generatedAt: string;
+  totalStudents: number;
+  totalThemes: number;
+  totalSessions: number;
+  themeStatistics: ThemeStatistics[];
+  themeDifficultyRanking: { themeName: string; difficultyWeight: number; meanCompletion: number }[];
+  studentProfiles: StudentProfile[];
+  classSummaries: ClassSummary[];
+  globalMechanicalAverage: number;
+  globalProgrammingAverage: number;
+  globalDomainStrength: 'Mechanical' | 'Programming' | 'Balanced';
+  hardestThemes: { name: string; meanCompletion: number; category?: ThemeCategory }[];
+  easiestThemes: { name: string; meanCompletion: number; category?: ThemeCategory }[];
+  studentAttributesMapEntries: [string, StudentAttributesSummary][]; // Map converted to entries
+}
+
 interface AnalyticsCache {
-  data: AnalyticsResult;
+  data: AnalyticsCacheData;
   timestamp: number;
 }
 
@@ -41,7 +61,12 @@ function getCachedAnalytics(): AnalyticsResult | null {
 
     if (age < ANALYTICS_CACHE_DURATION_MS) {
       console.log(`📊 Using cached analytics (${Math.round(age / 1000 / 60)} minutes old)`);
-      return data;
+      // Reconstruct Map from entries
+      const { studentAttributesMapEntries, ...rest } = data;
+      return {
+        ...rest,
+        studentAttributesMap: new Map(studentAttributesMapEntries),
+      };
     }
 
     console.log('📊 Analytics cache expired, will refresh');
@@ -54,8 +79,14 @@ function getCachedAnalytics(): AnalyticsResult | null {
 
 function setCachedAnalytics(data: AnalyticsResult): void {
   try {
+    // Convert Map to entries array for JSON serialization
+    const { studentAttributesMap, ...rest } = data;
+    const cacheData: AnalyticsCacheData = {
+      ...rest,
+      studentAttributesMapEntries: Array.from(studentAttributesMap.entries()),
+    };
     const cache: AnalyticsCache = {
-      data,
+      data: cacheData,
       timestamp: Date.now()
     };
     localStorage.setItem(ANALYTICS_CACHE_KEY, JSON.stringify(cache));
@@ -156,6 +187,86 @@ function getDistributionBuckets(values: number[]): { bucket: string; count: numb
     count: b.count,
     percent: (b.count / total) * 100,
   }));
+}
+
+// ============================================================================
+// STUDENT ATTRIBUTE WEIGHTS (for competition readiness)
+// ============================================================================
+
+const ATTRIBUTE_WEIGHTS = {
+  coachability: 0.30,      // 30%
+  competitiveness: 0.25,   // 25%
+  teamwork: 0.18,          // 18%
+  independence: 0.18,      // 18%
+  performance: 0.09,       // 9%
+} as const;
+
+const DEFAULT_ATTRIBUTE_VALUE = 50; // Default for students without saved attributes
+
+/**
+ * Calculate weighted attribute score (0-100)
+ */
+function calculateWeightedAttributeScore(attrs: {
+  coachability: number;
+  competitiveness: number;
+  teamwork: number;
+  independence: number;
+  performance: number;
+}): number {
+  return (
+    attrs.coachability * ATTRIBUTE_WEIGHTS.coachability +
+    attrs.competitiveness * ATTRIBUTE_WEIGHTS.competitiveness +
+    attrs.teamwork * ATTRIBUTE_WEIGHTS.teamwork +
+    attrs.independence * ATTRIBUTE_WEIGHTS.independence +
+    attrs.performance * ATTRIBUTE_WEIGHTS.performance
+  );
+}
+
+/**
+ * Build student attributes summary map from raw database data
+ */
+function buildStudentAttributesMap(
+  studentProfiles: StudentProfile[],
+  attributesData: Map<string, StudentAttributesRow>
+): Map<string, StudentAttributesSummary> {
+  const studentAttributesMap = new Map<string, StudentAttributesSummary>();
+
+  for (const profile of studentProfiles) {
+    const attrs = attributesData.get(profile.studentId);
+
+    if (attrs) {
+      const weightedScore = calculateWeightedAttributeScore({
+        coachability: attrs.coachability,
+        competitiveness: attrs.competitiveness,
+        teamwork: attrs.teamwork,
+        independence: attrs.independence,
+        performance: attrs.performance,
+      });
+
+      studentAttributesMap.set(profile.studentId, {
+        coachability: attrs.coachability,
+        competitiveness: attrs.competitiveness,
+        teamwork: attrs.teamwork,
+        independence: attrs.independence,
+        performance: attrs.performance,
+        weightedAttributeScore: weightedScore,
+        hasAttributes: true,
+      });
+    } else {
+      // Default values for students without saved attributes
+      studentAttributesMap.set(profile.studentId, {
+        coachability: DEFAULT_ATTRIBUTE_VALUE,
+        competitiveness: DEFAULT_ATTRIBUTE_VALUE,
+        teamwork: DEFAULT_ATTRIBUTE_VALUE,
+        independence: DEFAULT_ATTRIBUTE_VALUE,
+        performance: DEFAULT_ATTRIBUTE_VALUE,
+        weightedAttributeScore: DEFAULT_ATTRIBUTE_VALUE,
+        hasAttributes: false,
+      });
+    }
+  }
+
+  return studentAttributesMap;
 }
 
 // ============================================================================
@@ -593,6 +704,7 @@ export async function generateAnalytics(forceRefresh = false): Promise<Analytics
       globalDomainStrength: 'Balanced',
       hardestThemes: [],
       easiestThemes: [],
+      studentAttributesMap: new Map(),
     };
   }
 
@@ -608,7 +720,12 @@ export async function generateAnalytics(forceRefresh = false): Promise<Analytics
   const classSummaries = calculateClassSummaries(studentProfiles);
   console.log(`  ✓ Generated summaries for ${classSummaries.length} classes`);
 
-  // Step 5: Calculate global metrics
+  // Step 5: Load student attributes for scatter plot
+  const attributesData = await loadAllStudentAttributes();
+  const studentAttributesMap = buildStudentAttributesMap(studentProfiles, attributesData);
+  console.log(`  ✓ Loaded attributes for ${attributesData.size} students (${studentAttributesMap.size} mapped)`);
+
+  // Step 6: Calculate global metrics
   const mechanicalScores = studentProfiles
     .filter(p => p.mechanicalThemeCount > 0)
     .map(p => p.mechanicalScore);
@@ -667,6 +784,7 @@ export async function generateAnalytics(forceRefresh = false): Promise<Analytics
     globalDomainStrength,
     hardestThemes,
     easiestThemes,
+    studentAttributesMap,
   };
 
   // Cache the result for 24 hours to reduce egress

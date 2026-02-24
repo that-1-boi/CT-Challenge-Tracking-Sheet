@@ -5,6 +5,7 @@ import {
   StudentProfile,
   ThemeStatistics,
   StudentThemeScore,
+  StudentAttributesSummary,
 } from '../services/analyticsTypes';
 import { subscribeSyncEvent } from '../services/syncEvents';
 import { loadStudentAttributes, saveStudentAttributes } from '../services/supabaseService';
@@ -546,7 +547,10 @@ const OverviewSection: React.FC<{ analytics: AnalyticsResult }> = ({ analytics }
       </div>
 
       {/* Student Scatter Plot - Team Readiness Map */}
-      <StudentScatterPlot profiles={analytics.studentProfiles} />
+      <StudentScatterPlot
+        profiles={analytics.studentProfiles}
+        studentAttributesMap={analytics.studentAttributesMap}
+      />
 
       {/* Theme Difficulty */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -647,27 +651,65 @@ interface StudentPoint {
   profile: StudentProfile;
   tier: ReadinessTier;
   tierLabel: string;
-  color: string;
+  tierColor: string;           // Original tier-based color
+  attributeScore: number;      // Weighted attribute score (0-100)
+  hasAttributes: boolean;      // Whether student has saved attributes
+  attributeColor: string;      // Color based on attribute quality
+  compositeScore: number;      // 50% technical + 50% attributes
 }
 
-function getReadinessTier(profile: StudentProfile): { tier: ReadinessTier; label: string; color: string } {
-  const curvedAvg = profile.overallScore;
+/**
+ * Get color for attribute quality score (0-100)
+ * Red (low) -> Yellow (medium) -> Green (high)
+ * Gray for students without saved attributes
+ */
+function getAttributeColor(score: number, hasAttributes: boolean): string {
+  if (!hasAttributes) {
+    return '#9ca3af'; // Gray for no data
+  }
+
+  // Clamp score to 0-100
+  const s = Math.max(0, Math.min(100, score));
+
+  if (s < 40) {
+    // Red zone (0-40): deep red to orange-red
+    const t = s / 40;
+    return `rgb(${Math.round(220 + t * 29)}, ${Math.round(38 + t * 77)}, ${Math.round(38 - t * 16)})`;
+  } else if (s < 60) {
+    // Yellow zone (40-60): orange to yellow
+    const t = (s - 40) / 20;
+    return `rgb(${Math.round(249 - t * 15)}, ${Math.round(115 + t * 64)}, ${Math.round(22 - t * 14)})`;
+  } else {
+    // Green zone (60-100): lime to green
+    const t = (s - 60) / 40;
+    return `rgb(${Math.round(132 - t * 98)}, ${Math.round(204 - t * 7)}, ${Math.round(22 + t * 72)})`;
+  }
+}
+
+function getReadinessTier(
+  profile: StudentProfile,
+  attributeScore: number = 50
+): { tier: ReadinessTier; label: string; color: string } {
+  // Calculate composite: 50% technical + 50% attributes
+  const technicalScore = profile.overallScore;
+  const compositeScore = (technicalScore * 0.5) + (attributeScore * 0.5);
+
   const mech = profile.mechanicalScore;
   const prog = profile.programmingScore;
 
-  // Competition Ready: curved_avg >= 85 AND mech >= 60 AND prog >= 60
-  if (curvedAvg >= 85 && mech >= 60 && prog >= 60) {
+  // Competition Ready: composite >= 75 AND mech >= 55 AND prog >= 55
+  if (compositeScore >= 75 && mech >= 55 && prog >= 55) {
     return { tier: 'competition-ready', label: 'Competition Ready', color: '#22c55e' };
   }
 
-  // Near Ready: curved_avg >= 70
-  if (curvedAvg >= 70) {
+  // Near Ready: composite >= 60
+  if (compositeScore >= 60) {
     return { tier: 'near-ready', label: 'Near Ready', color: '#eab308' };
   }
 
-  // Specialist: mech >= 80 XOR prog >= 80 (one but not both)
-  const mechSpecialist = mech >= 80;
-  const progSpecialist = prog >= 80;
+  // Specialist: mech >= 70 XOR prog >= 70 (strong in one domain)
+  const mechSpecialist = mech >= 70;
+  const progSpecialist = prog >= 70;
   if ((mechSpecialist && !progSpecialist) || (!mechSpecialist && progSpecialist)) {
     return { tier: 'specialist', label: 'Specialist', color: '#3b82f6' };
   }
@@ -680,17 +722,36 @@ function getReadinessTier(profile: StudentProfile): { tier: ReadinessTier; label
 // STUDENT SCATTER PLOT COMPONENT
 // ============================================================================
 
-const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles }) => {
+const StudentScatterPlot: React.FC<{
+  profiles: StudentProfile[];
+  studentAttributesMap: Map<string, StudentAttributesSummary>;
+}> = ({ profiles, studentAttributesMap }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [hoveredStudent, setHoveredStudent] = useState<{ point: StudentPoint; x: number; y: number } | null>(null);
 
-  // Process students into points with tier information
+  // Process students into points with tier and attribute information
   const studentPoints: StudentPoint[] = useMemo(() => {
     return profiles.map(profile => {
-      const { tier, label, color } = getReadinessTier(profile);
-      return { profile, tier, tierLabel: label, color };
+      const attrData = studentAttributesMap.get(profile.studentId);
+      const attributeScore = attrData?.weightedAttributeScore ?? 50;
+      const hasAttributes = attrData?.hasAttributes ?? false;
+      const attributeColor = getAttributeColor(attributeScore, hasAttributes);
+      const compositeScore = (profile.overallScore * 0.5) + (attributeScore * 0.5);
+
+      const { tier, label, color } = getReadinessTier(profile, attributeScore);
+
+      return {
+        profile,
+        tier,
+        tierLabel: label,
+        tierColor: color,
+        attributeScore,
+        hasAttributes,
+        attributeColor,
+        compositeScore,
+      };
     });
-  }, [profiles]);
+  }, [profiles, studentAttributesMap]);
 
   // Calculate medians for crosshairs
   const medians = useMemo(() => {
@@ -850,23 +911,23 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
           </p>
         </div>
 
-        {/* Legend */}
+        {/* Legend - Attribute Quality */}
         <div className="flex flex-wrap gap-3 text-[16px]">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[#22c55e]"></span>
-            <span className="font-bold text-gray-600">Ready ({tierCounts['competition-ready']})</span>
+            <span className="font-bold text-gray-600">High Attr (70+)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[#eab308]"></span>
-            <span className="font-bold text-gray-600">Potential ({tierCounts['near-ready']})</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-[#3b82f6]"></span>
-            <span className="font-bold text-gray-600">Progressing ({tierCounts['specialist']})</span>
+            <span className="font-bold text-gray-600">Medium (50-70)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-[#ef4444]"></span>
-            <span className="font-bold text-gray-600">Developing ({tierCounts['not-ready']})</span>
+            <span className="font-bold text-gray-600">Low (&lt;50)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-[#9ca3af] opacity-50" style={{ border: '1px dashed #6b7280' }}></span>
+            <span className="font-bold text-gray-600">No Data ({studentPoints.filter(p => !p.hasAttributes).length})</span>
           </div>
         </div>
       </div>
@@ -954,10 +1015,11 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
                 cx={xScale(point.profile.mechanicalScore) + jitterX}
                 cy={yScale(point.profile.programmingScore) + jitterY}
                 r={isHovered ? r + 3 : r}
-                fill={point.color}
-                fillOpacity={0.85}
+                fill={point.attributeColor}
+                fillOpacity={point.hasAttributes ? 0.85 : 0.5}
                 stroke={isHovered ? '#000' : 'white'}
                 strokeWidth={isHovered ? 3 : 2}
+                strokeDasharray={point.hasAttributes ? undefined : '3,2'}
                 className="cursor-pointer transition-all duration-150"
                 onMouseEnter={(e) => handleMouseEnter(point, e)}
                 onMouseLeave={() => setHoveredStudent(null)}
@@ -977,7 +1039,7 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
               left: hoveredStudent.x,
               top: hoveredStudent.y,
               transform: 'translate(-50%, -100%)',
-              minWidth: '180px',
+              minWidth: '200px',
             }}
           >
             <div className="font-black text-base uppercase mb-2 text-[#f4c514]">{hoveredStudent.point.profile.studentName}</div>
@@ -991,16 +1053,26 @@ const StudentScatterPlot: React.FC<{ profiles: StudentProfile[] }> = ({ profiles
                 <span className="font-bold text-blue-400">{Math.round(hoveredStudent.point.profile.programmingScore)}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-gray-400">Raw Avg:</span>
-                <span className="font-bold">{Math.round(hoveredStudent.point.profile.averageRawCompletion)}%</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-gray-400">Curved Avg:</span>
+                <span className="text-gray-400">Technical:</span>
                 <span className="font-bold">{Math.round(hoveredStudent.point.profile.overallScore)}</span>
+              </div>
+              <div className="pt-1.5 border-t border-white/20 mt-1.5 space-y-1.5">
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-400">Attributes:</span>
+                  <span className="font-bold" style={{ color: hoveredStudent.point.attributeColor }}>
+                    {hoveredStudent.point.hasAttributes
+                      ? Math.round(hoveredStudent.point.attributeScore)
+                      : 'No Data'}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-400">Composite:</span>
+                  <span className="font-bold text-purple-400">{Math.round(hoveredStudent.point.compositeScore)}</span>
+                </div>
               </div>
               <div className="flex justify-between gap-4 pt-1.5 border-t border-white/20 mt-1.5">
                 <span className="text-gray-400">Tier:</span>
-                <span className="font-black" style={{ color: hoveredStudent.point.color }}>{hoveredStudent.point.tierLabel}</span>
+                <span className="font-black" style={{ color: hoveredStudent.point.tierColor }}>{hoveredStudent.point.tierLabel}</span>
               </div>
             </div>
           </div>

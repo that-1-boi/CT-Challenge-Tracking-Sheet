@@ -1490,6 +1490,37 @@ export const saveStudentAttributes = async (
   }
 };
 
+/**
+ * Batch load attributes for ALL students (for scatter plot analytics)
+ * Returns a Map keyed by student_id for O(1) lookup
+ */
+export const loadAllStudentAttributes = async (): Promise<Map<string, StudentAttributesRow>> => {
+  try {
+    console.log(`📋 Batch loading all student attributes...`);
+
+    const { data, error } = await supabase
+      .from('student_attributes')
+      .select('id, student_id, competitiveness, independence, teamwork, performance, coachability, comments, created_at, updated_at');
+
+    if (error) {
+      console.error('Error batch loading student attributes:', error);
+      throw error;
+    }
+
+    // Convert to Map for O(1) lookup by student_id
+    const attributesMap = new Map<string, StudentAttributesRow>();
+    for (const row of data || []) {
+      attributesMap.set(row.student_id, row as StudentAttributesRow);
+    }
+
+    console.log(`✅ Batch loaded attributes for ${attributesMap.size} students`);
+    return attributesMap;
+  } catch (error) {
+    console.error('Fatal error batch loading student attributes:', error);
+    throw error;
+  }
+};
+
 // =============================================================================
 // DEFAULT STATE
 // =============================================================================

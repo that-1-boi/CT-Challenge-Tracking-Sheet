@@ -183,6 +183,24 @@ export interface ClassSummary {
 // ANALYTICS RESULT (Complete output)
 // ============================================================================
 
+// ============================================================================
+// STUDENT ATTRIBUTES SUMMARY (For scatter plot analytics)
+// ============================================================================
+
+export interface StudentAttributesSummary {
+  coachability: number;      // 0-100
+  competitiveness: number;   // 0-100
+  teamwork: number;          // 0-100
+  independence: number;      // 0-100
+  performance: number;       // 0-100
+  weightedAttributeScore: number;  // Pre-calculated weighted score (0-100)
+  hasAttributes: boolean;    // Whether student has saved attributes in DB
+}
+
+// ============================================================================
+// ANALYTICS RESULT (Complete output)
+// ============================================================================
+
 export interface AnalyticsResult {
   // Metadata
   generatedAt: string;
@@ -208,4 +226,7 @@ export interface AnalyticsResult {
   // Hardest/easiest themes
   hardestThemes: { name: string; meanCompletion: number; category?: ThemeCategory }[];
   easiestThemes: { name: string; meanCompletion: number; category?: ThemeCategory }[];
+
+  // Student attributes map for scatter plot coloring (keyed by studentId)
+  studentAttributesMap: Map<string, StudentAttributesSummary>;
 }
