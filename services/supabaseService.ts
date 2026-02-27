@@ -604,7 +604,7 @@ export const loadDashboardState = async (selectedThemeName?: string): Promise<Ap
 
     return {
       themes,
-      currentWeekTheme: resolvedCurrentTheme,
+      currentWeekTheme: targetThemeName,
       publicThemeName: publicThemeName || resolvedCurrentTheme,
       publicClassId: publicClassId || DEFAULT_CLASSES[0].id,
       selectedClassId: selectedClassId || DEFAULT_CLASSES[0].id,
