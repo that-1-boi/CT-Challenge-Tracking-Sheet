@@ -3,6 +3,10 @@ import { AppState, StudentProgress } from '../types';
 import { getPublicSettings, loadPublicViewStateByClass, updatePublicSettings } from '../services/storageService';
 import { DEFAULT_CLASSES } from '../constants';
 
+// Module-level cache — persists across mounts so navigating away and back is instant
+const _sessionCache = new Map<string, AppState>();
+let _cachedSettings: { publicThemeName: string; publicClassId: string } | null = null;
+
 const LivePublicView: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -10,20 +14,28 @@ const LivePublicView: React.FC = () => {
   // The active theme name — fetched once from DB on mount and stays fixed
   const publicThemeNameRef = useRef<string>('');
 
-  // In-memory session cache: classId → AppState
-  // Avoids re-querying even the cache layer when toggling between already-loaded classes
-  const sessionCache = useRef<Map<string, AppState>>(new Map());
-
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Fetch public settings (lightweight 2-row query) to know which theme/class to show
+        // If we already have settings + a cached state for that class, render instantly
+        if (_cachedSettings) {
+          const cached = _sessionCache.get(_cachedSettings.publicClassId);
+          if (cached) {
+            publicThemeNameRef.current = _cachedSettings.publicThemeName;
+            setState(cached);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // No cache hit — fetch public settings (lightweight 2-row query)
         const { publicThemeName, publicClassId } = await getPublicSettings();
+        _cachedSettings = { publicThemeName, publicClassId };
         publicThemeNameRef.current = publicThemeName;
 
-        // Load data for the current class — serves from 48hr cache if available and unchanged
+        // Load data for the current class — serves from 48hr localStorage cache if unchanged
         const loadedState = await loadPublicViewStateByClass(publicThemeName, publicClassId);
-        sessionCache.current.set(publicClassId, loadedState);
+        _sessionCache.set(publicClassId, loadedState);
         setState(loadedState);
         setLoading(false);
       } catch (error) {
@@ -41,12 +53,13 @@ const LivePublicView: React.FC = () => {
       try {
         console.log('LivePublicView: Daily refresh triggered');
         const { publicThemeName, publicClassId } = await getPublicSettings();
+        _cachedSettings = { publicThemeName, publicClassId };
         publicThemeNameRef.current = publicThemeName;
 
         // Force a fresh DB-change check by clearing that class from session cache
-        sessionCache.current.delete(publicClassId);
+        _sessionCache.delete(publicClassId);
         const loadedState = await loadPublicViewStateByClass(publicThemeName, publicClassId);
-        sessionCache.current.set(publicClassId, loadedState);
+        _sessionCache.set(publicClassId, loadedState);
         setState(loadedState);
       } catch (error) {
         console.error('Error refreshing state:', error);
@@ -63,7 +76,7 @@ const LivePublicView: React.FC = () => {
     const themeName = publicThemeNameRef.current;
 
     // 1. Check in-memory session cache first (instant, no I/O)
-    const cached = sessionCache.current.get(newClassId);
+    const cached = _sessionCache.get(newClassId);
     if (cached) {
       console.log(`LivePublicView: Session cache hit for ${newClassId}`);
       setState(cached);
@@ -78,10 +91,11 @@ const LivePublicView: React.FC = () => {
     try {
       // Update DB setting so other public screens follow this selection
       await updatePublicSettings(undefined, newClassId);
+      if (_cachedSettings) _cachedSettings = { ..._cachedSettings, publicClassId: newClassId };
 
       // Load from 48hr cache or DB (DB-change detection included)
       const loadedState = await loadPublicViewStateByClass(themeName, newClassId);
-      sessionCache.current.set(newClassId, loadedState);
+      _sessionCache.set(newClassId, loadedState);
       setState(loadedState);
 
       window.dispatchEvent(new Event('storage'));
