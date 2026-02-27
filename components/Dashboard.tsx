@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, StudentProgress } from '../types';
-import { loadDashboardState, saveState } from '../services/storageService';
+import { loadDashboardState, saveDashboardProgress } from '../services/storageService';
 import { dispatchSyncEvent, setLastSyncTimestamp } from '../services/syncEvents';
 
 const Dashboard: React.FC = () => {
@@ -43,7 +43,7 @@ const Dashboard: React.FC = () => {
 
     setSaveStatus('saving');
     try {
-      await saveState(state);
+      await saveDashboardProgress(state);
       setHasUnsavedChanges(false);
       setSaveStatus('saved');
       console.log('Dashboard: State synced to cloud successfully');
@@ -63,7 +63,7 @@ const Dashboard: React.FC = () => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasUnsavedChanges && stateRef.current) {
         // Attempt to save (note: async operations may not complete)
-        saveState(stateRef.current).catch(console.error);
+        saveDashboardProgress(stateRef.current).catch(console.error);
 
         // Show browser warning
         e.preventDefault();

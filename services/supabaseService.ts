@@ -617,6 +617,83 @@ export const loadDashboardState = async (selectedThemeName?: string): Promise<Ap
 };
 
 // =============================================================================
+// SAVE DASHBOARD PROGRESS (targeted: only saves current theme's progress + settings)
+// =============================================================================
+
+export const saveDashboardProgress = async (state: AppState): Promise<void> => {
+  if (!state.currentWeekTheme || !state.progress) return;
+
+  try {
+    console.log('💾 Saving dashboard progress (theme-scoped)...');
+    const startTime = Date.now();
+
+    // 1. Resolve the current theme's DB id
+    const { data: themeRow, error: themeError } = await supabase
+      .from('themes')
+      .select('id')
+      .eq('name', state.currentWeekTheme)
+      .single();
+
+    if (themeError || !themeRow) {
+      console.error('  ✗ Theme not found for progress save:', state.currentWeekTheme);
+      throw new Error('Theme not found');
+    }
+
+    const themeId = themeRow.id;
+
+    // 2. Build progress rows only for the current theme
+    const progressArray: any[] = [];
+
+    for (const [key, prog] of Object.entries(state.progress)) {
+      const parts = key.split('_');
+      if (parts.length < 3) continue;
+
+      const classSessionId = parts[0];
+      const studentId = parts[1];
+      const themeName = parts.slice(2).join('_');
+
+      if (themeName !== state.currentWeekTheme) continue;
+
+      progressArray.push({
+        student_id: studentId,
+        theme_id: themeId,
+        class_session_id: classSessionId,
+        challenge_1_completed: prog.challengesCompleted.includes('c1'),
+        challenge_2_completed: prog.challengesCompleted.includes('c2'),
+        challenge_3_completed: prog.challengesCompleted.includes('c3'),
+        challenge_4_completed: prog.challengesCompleted.includes('c4'),
+        challenge_5_completed: prog.challengesCompleted.includes('c5'),
+        last_updated: new Date(prog.timestamp || Date.now()).toISOString(),
+      });
+    }
+
+    // 3. Batch upsert progress (single DB call)
+    if (progressArray.length > 0) {
+      const { error } = await supabase
+        .from('student_progress')
+        .upsert(progressArray, { onConflict: 'student_id,theme_id' });
+
+      if (error) {
+        console.error('  ✗ Error saving progress:', error);
+        throw error;
+      }
+      console.log(`  ✓ Saved ${progressArray.length} progress records`);
+    }
+
+    // 4. Save only the two settings the Dashboard controls
+    await Promise.all([
+      setAppSetting('current_week_theme_id', state.currentWeekTheme),
+      setAppSetting('selected_class_id', state.selectedClassId),
+    ]);
+
+    console.log(`✅ Dashboard progress saved in ${Date.now() - startTime}ms`);
+  } catch (error) {
+    console.error('✗ Fatal error saving dashboard progress:', error);
+    throw error;
+  }
+};
+
+// =============================================================================
 // SAVE STATE TO DATABASE
 // =============================================================================
 
