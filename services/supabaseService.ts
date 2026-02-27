@@ -494,6 +494,129 @@ export const loadState = async (forceRefresh = false): Promise<AppState> => {
 };
 
 // =============================================================================
+// LOAD DASHBOARD STATE (optimized: only loads the selected theme's data)
+// =============================================================================
+
+export const loadDashboardState = async (selectedThemeName?: string): Promise<AppState> => {
+  try {
+    console.log('🔄 Loading dashboard state (theme-scoped)...');
+    const startTime = Date.now();
+
+    // 1. Load all themes metadata (lightweight — just names + challenges)
+    const { data: themesData, error: themesError } = await supabase
+      .from('themes')
+      .select('id, name, challenge_1, challenge_2, challenge_3, challenge_4, challenge_5, category, created_at')
+      .order('created_at', { ascending: true });
+
+    if (themesError || !themesData?.length) {
+      console.error('✗ Error loading themes:', themesError);
+      return getDefaultAppState();
+    }
+
+    // 2. Resolve app settings in parallel
+    const [currentWeekThemeName, publicThemeName, publicClassId, selectedClassId] = await Promise.all([
+      getAppSetting('current_week_theme_id'),
+      getAppSetting('public_theme_id'),
+      getAppSetting('public_class_id'),
+      getAppSetting('selected_class_id'),
+    ]);
+
+    const resolvedCurrentTheme = currentWeekThemeName || themesData[themesData.length - 1]?.name || '';
+    const targetThemeName = selectedThemeName || resolvedCurrentTheme;
+    const targetThemeRow = themesData.find((t: ThemeRow) => t.name === targetThemeName) || themesData[themesData.length - 1];
+
+    // 3. Load assignments + progress for the target theme only (in parallel)
+    const [assignmentsResult, progressResult] = await Promise.all([
+      supabase
+        .from('student_assignments')
+        .select('student_id, theme_id, class_session_id')
+        .eq('theme_id', targetThemeRow.id),
+      supabase
+        .from('student_progress')
+        .select('student_id, theme_id, class_session_id, challenge_1_completed, challenge_2_completed, challenge_3_completed, challenge_4_completed, challenge_5_completed, last_updated')
+        .eq('theme_id', targetThemeRow.id),
+    ]);
+
+    const assignmentsData = assignmentsResult.data || [];
+    const progressData = progressResult.data || [];
+
+    // 4. Load only students assigned to this theme
+    const studentIds = [...new Set(assignmentsData.map((a: StudentAssignmentRow) => a.student_id))];
+    let studentsData: StudentRow[] = [];
+    if (studentIds.length > 0) {
+      const { data } = await supabase
+        .from('students')
+        .select('id, name')
+        .in('id', studentIds);
+      studentsData = data || [];
+    }
+
+    const elapsed = Date.now() - startTime;
+    console.log(`✅ Dashboard state loaded in ${elapsed}ms (theme: ${targetThemeRow.name}, ${studentsData.length} students, ${progressData.length} progress records)`);
+
+    // 5. Build themes array — all themes have metadata, only the active theme has populated classes
+    const themes: Theme[] = themesData.map((themeRow: ThemeRow) => {
+      const isActive = themeRow.id === targetThemeRow.id;
+      const classes: ClassSession[] = DEFAULT_CLASSES.map(defaultClass => {
+        if (!isActive) return { id: defaultClass.id, name: defaultClass.name, students: [] };
+
+        const classAssignments = assignmentsData.filter(
+          (a: StudentAssignmentRow) => a.class_session_id === defaultClass.id
+        );
+        const students: Student[] = classAssignments
+          .map((a: StudentAssignmentRow) => studentsData.find((s: StudentRow) => s.id === a.student_id))
+          .filter(Boolean)
+          .map((s: any) => ({ id: s.id, name: s.name }))
+          .sort((a: Student, b: Student) => a.name.localeCompare(b.name));
+
+        return { id: defaultClass.id, name: defaultClass.name, students };
+      });
+
+      return {
+        name: themeRow.name,
+        challenges: [themeRow.challenge_1, themeRow.challenge_2, themeRow.challenge_3, themeRow.challenge_4, themeRow.challenge_5],
+        classes,
+        category: (themeRow.category as ThemeCategory) || undefined,
+      };
+    });
+
+    // 6. Build progress for the target theme only
+    const progress: Record<string, StudentProgress> = {};
+    for (const prog of progressData as StudentProgressRow[]) {
+      const student = studentsData.find((s: StudentRow) => s.id === prog.student_id);
+      if (student) {
+        const challengesCompleted: string[] = [];
+        if (prog.challenge_1_completed) challengesCompleted.push('c1');
+        if (prog.challenge_2_completed) challengesCompleted.push('c2');
+        if (prog.challenge_3_completed) challengesCompleted.push('c3');
+        if (prog.challenge_4_completed) challengesCompleted.push('c4');
+        if (prog.challenge_5_completed) challengesCompleted.push('c5');
+
+        const key = `${prog.class_session_id}_${prog.student_id}_${targetThemeRow.name}`;
+        progress[key] = {
+          studentId: prog.student_id,
+          studentName: student.name,
+          challengesCompleted,
+          timestamp: new Date(prog.last_updated).getTime(),
+        };
+      }
+    }
+
+    return {
+      themes,
+      currentWeekTheme: resolvedCurrentTheme,
+      publicThemeName: publicThemeName || resolvedCurrentTheme,
+      publicClassId: publicClassId || DEFAULT_CLASSES[0].id,
+      selectedClassId: selectedClassId || DEFAULT_CLASSES[0].id,
+      progress,
+    };
+  } catch (error) {
+    console.error('✗ Fatal error loading dashboard state:', error);
+    return getDefaultAppState();
+  }
+};
+
+// =============================================================================
 // SAVE STATE TO DATABASE
 // =============================================================================
 

@@ -1,40 +1,34 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AppState, HistoryEntry, StudentProgress } from '../types';
-import { loadState, saveState, loadHistory } from '../services/storageService';
+import { AppState, StudentProgress } from '../types';
+import { loadDashboardState, saveState } from '../services/storageService';
 import { dispatchSyncEvent, setLastSyncTimestamp } from '../services/syncEvents';
 
 const Dashboard: React.FC = () => {
   const [state, setState] = useState<AppState | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [themeLoading, setThemeLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const isInitialLoad = useRef(true);
   const stateRef = useRef<AppState | null>(null); // For beforeunload access
 
-  // Load state and history from database on mount
+  // Load only the current theme's data on mount
   useEffect(() => {
-    console.log('Dashboard: Starting to load state and history...');
-    Promise.all([loadState(), loadHistory()]).then(([loadedState, loadedHistory]) => {
+    console.log('Dashboard: Starting to load state...');
+    loadDashboardState().then((loadedState) => {
       console.log('Dashboard: ===== DATA LOADED FROM DATABASE =====');
       console.log('Dashboard: Themes:', loadedState.themes.length);
       console.log('Dashboard: Current theme:', loadedState.currentWeekTheme);
-      console.log('Dashboard: History entries:', loadedHistory.length);
       console.log('Dashboard: =====================================');
 
-      // Ensure progress exists as an object
       if (!loadedState.progress) {
         loadedState.progress = {};
       }
 
       setState(loadedState);
-      setHistory(loadedHistory);
       setLoading(false);
-      isInitialLoad.current = false;
     }).catch(error => {
       console.error('Dashboard: Error loading data:', error);
       setLoading(false);
-      isInitialLoad.current = false;
     });
   }, []);
 
@@ -57,10 +51,6 @@ const Dashboard: React.FC = () => {
       // Record sync timestamp and notify other components
       setLastSyncTimestamp();
       dispatchSyncEvent();
-
-      // Refresh history after sync
-      const refreshedHistory = await loadHistory();
-      setHistory(refreshedHistory);
     } catch (error) {
       console.error('Dashboard: Error syncing state:', error);
       setSaveStatus('error');
@@ -249,8 +239,16 @@ const Dashboard: React.FC = () => {
                 <select
                   value={state.currentWeekTheme}
                   onChange={(e) => {
-                    console.log('Dashboard: Switching to theme:', e.target.value);
-                    setState(prev => prev ? ({ ...prev, currentWeekTheme: e.target.value }) : prev);
+                    const newTheme = e.target.value;
+                    console.log('Dashboard: Switching to theme:', newTheme);
+                    setThemeLoading(true);
+                    loadDashboardState(newTheme).then((loadedState) => {
+                      setState(prev => prev ? {
+                        ...loadedState,
+                        selectedClassId: prev.selectedClassId,
+                      } : loadedState);
+                      setHasUnsavedChanges(false);
+                    }).catch(console.error).finally(() => setThemeLoading(false));
                   }}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 >
@@ -274,7 +272,12 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Table container - responsive sizing */}
-      <div className="bg-white shadow-xl rounded-sm overflow-hidden border border-slate-100">
+      <div className={`bg-white shadow-xl rounded-sm overflow-hidden border border-slate-100 relative transition-opacity ${themeLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+        {themeLoading && (
+          <div className="absolute inset-0 flex items-center justify-center z-10">
+            <div className="w-8 h-8 border-4 border-[#f4c514] border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        )}
         <div className="w-full overflow-x-auto portrait:overflow-y-auto portrait:max-h-[60vh] landscape-phone:overflow-y-auto landscape-phone:max-h-[75vh]">
           <table className="w-full border-collapse table-fixed min-w-[280px]">
             <thead>
