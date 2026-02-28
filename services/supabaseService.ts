@@ -797,6 +797,20 @@ export const saveState = async (state: AppState): Promise<void> => {
 
       for (const classSession of theme.classes) {
         for (const student of classSession.students) {
+          // If student is unassigned, only keep their assignment record if they
+          // have in-progress challenges for this theme. Otherwise, let it be
+          // cleaned up as an orphaned assignment.
+          if (classSession.id === 'unassigned') {
+            const hasProgress = Object.entries(state.progress).some(([key, prog]) => {
+              const parts = key.split('_');
+              if (parts.length < 3) return false;
+              const keyStudentId = parts[1];
+              const keyThemeName = parts.slice(2).join('_');
+              return keyStudentId === student.id && keyThemeName === theme.name && prog.challengesCompleted.length > 0;
+            });
+            if (!hasProgress) continue;
+          }
+
           currentAssignments.push({
             student_id: student.id,
             theme_id: themeId,
