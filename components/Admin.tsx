@@ -633,7 +633,7 @@ const Admin: React.FC = () => {
                 onChange={(e) => setPublicTheme(e.target.value)}
                 className="w-full bg-white/10 border border-white/20 text-white font-black uppercase p-3 text-sm focus:border-[#f4c514] outline-none min-w-[300px]"
               >
-                {state.themes.map(t => <option key={t.name} value={t.name} className="bg-black">{t.name}</option>)}
+                {[...state.themes].reverse().map(t => <option key={t.name} value={t.name} className="bg-black">{t.name}</option>)}
               </select>
             </div>
           </div>
