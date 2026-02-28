@@ -797,20 +797,6 @@ export const saveState = async (state: AppState): Promise<void> => {
 
       for (const classSession of theme.classes) {
         for (const student of classSession.students) {
-          // If student is unassigned, only keep their assignment record if they
-          // have in-progress challenges for this theme. Otherwise, let it be
-          // cleaned up as an orphaned assignment.
-          if (classSession.id === 'unassigned') {
-            const hasProgress = Object.entries(state.progress).some(([key, prog]) => {
-              const parts = key.split('_');
-              if (parts.length < 3) return false;
-              const keyStudentId = parts[1];
-              const keyThemeName = parts.slice(2).join('_');
-              return keyStudentId === student.id && keyThemeName === theme.name && prog.challengesCompleted.length > 0;
-            });
-            if (!hasProgress) continue;
-          }
-
           currentAssignments.push({
             student_id: student.id,
             theme_id: themeId,
@@ -866,26 +852,42 @@ export const saveState = async (state: AppState): Promise<void> => {
       }
     }
 
-    // 3b. DELETE PROGRESS FOR STUDENTS MOVED TO UNASSIGNED
-    // If a student is moved to unassigned, remove their progress records
-    console.log('  🗑️  Cleaning up progress for unassigned students...');
+    // 3b. DELETE PROGRESS FOR STUDENTS MOVED TO UNASSIGNED WITH 0 IN-PROGRESS
+    // Only remove progress records for unassigned students who have no challenges
+    // completed — students who have actual progress keep their records.
+    console.log('  🗑️  Cleaning up progress for unassigned students with no progress...');
     let progressDeleted = 0;
+
+    // Build a reverse map from themeId → themeName for progress lookups
+    const themeNameById = new Map<string, string>();
+    for (const [name, id] of themeIdMap.entries()) themeNameById.set(id, name);
 
     const unassignedStudents = currentAssignments.filter(a => a.class_session_id === 'unassigned');
     for (const assignment of unassignedStudents) {
-      const { error } = await supabase
-        .from('student_progress')
-        .delete()
-        .eq('student_id', assignment.student_id)
-        .eq('theme_id', assignment.theme_id);
+      const themeName = themeNameById.get(assignment.theme_id);
+      if (!themeName) continue;
 
-      if (!error) {
-        progressDeleted++;
+      const hasProgress = Object.entries(state.progress).some(([key, prog]) => {
+        const parts = key.split('_');
+        if (parts.length < 3) return false;
+        return parts[1] === assignment.student_id &&
+          parts.slice(2).join('_') === themeName &&
+          prog.challengesCompleted.length > 0;
+      });
+
+      if (!hasProgress) {
+        const { error } = await supabase
+          .from('student_progress')
+          .delete()
+          .eq('student_id', assignment.student_id)
+          .eq('theme_id', assignment.theme_id);
+
+        if (!error) progressDeleted++;
       }
     }
 
     if (progressDeleted > 0) {
-      console.log(`  ✓ Deleted ${progressDeleted} progress records for unassigned students`);
+      console.log(`  ✓ Deleted ${progressDeleted} progress records for unassigned students with no progress`);
     }
 
     // 4. SAVE STUDENT PROGRESS (batch operation)
@@ -911,6 +913,13 @@ export const saveState = async (state: AppState): Promise<void> => {
         progressErrors++;
         continue;
       }
+
+      // Skip saving progress for unassigned students with 0 challenges — their
+      // records were just deleted in step 3b and shouldn't be re-created.
+      const isUnassigned = currentAssignments.some(
+        a => a.student_id === studentId && a.theme_id === themeId && a.class_session_id === 'unassigned'
+      );
+      if (isUnassigned && prog.challengesCompleted.length === 0) continue;
 
       // Convert challenge IDs to boolean columns
       progressArray.push({
