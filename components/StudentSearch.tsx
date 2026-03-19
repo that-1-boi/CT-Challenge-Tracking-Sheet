@@ -388,7 +388,7 @@ const StudentSearch: React.FC = () => {
                               <div className="mt-2 flex flex-wrap gap-2 pt-2 border-t border-black/5">
                                 <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest w-full">Missing</span>
                                 {missing.map((c, i) => (
-                                  <span key={i} className="text-[9px] font-black uppercase text-slate-400 bg-slate-100 px-2 py-1 border border-slate-200 rounded-sm line-through opacity-60">
+                                  <span key={i} className="text-[9px] font-black uppercase text-slate-400 bg-slate-100 px-2 py-1 border border-slate-200 rounded-sm opacity-60">
                                     {c}
                                   </span>
                                 ))}
