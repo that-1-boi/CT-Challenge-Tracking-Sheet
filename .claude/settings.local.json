@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm run build:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(grep -l \"challenge\\\\|theme\\\\|Challenge\\\\|Theme\" /c/Users/sebas/Documents/GitHub/CT-Challenge-Tracking-Sheet/components/*.tsx)"
     ]
   }
 }
